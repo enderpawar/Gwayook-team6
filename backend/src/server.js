@@ -4,6 +4,8 @@ import { analyze, validateOptions, validateProduct } from './analysis.js';
 import { createExtractionGuard } from './extraction-guard.js';
 import { extractProduct } from './gemini.js';
 import { presets } from './presets.js';
+import { openP1Database } from './p1/db.js';
+import { createP1Handler } from './p1/routes.js';
 
 const bodyLimit = 16 * 1024;
 const imageLimit = 5 * 1024 * 1024;
@@ -84,10 +86,13 @@ async function readImage(request) {
   return { mimeType: image.type, data };
 }
 
-export function createApp() {
-  return createServer(async (request, response) => {
+export function createApp({ p1DbPath = process.env.P1_DB_PATH } = {}) {
+  const store = p1DbPath ? openP1Database(p1DbPath) : null;
+  const handleP1 = store && createP1Handler(store, { readJson, send });
+  const server = createServer(async (request, response) => {
     const path = request.url?.split('?', 1)[0];
     try {
+      if (handleP1 && path?.startsWith('/api/p1/')) return await handleP1(request, response, path);
       if (path === '/api/presets' && request.method === 'GET') {
         return send(response, 200, { presets });
       }
@@ -121,10 +126,15 @@ export function createApp() {
       return send(response, 500, { code: 'INTERNAL_ERROR' });
     }
   });
+  if (store) server.once('close', store.close);
+  return server;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const host = process.env.HOST ?? '127.0.0.1';
+  if (process.env.P1_DB_PATH && !['127.0.0.1', '::1', 'localhost'].includes(host)) {
+    throw new Error('P1_DB_PATH requires a loopback HOST');
+  }
   const port = Number(process.env.PORT ?? 3001);
   const server = createApp();
   server.listen(port, host, () => console.log(`GigSplitter API listening on ${host}:${server.address().port}`));
