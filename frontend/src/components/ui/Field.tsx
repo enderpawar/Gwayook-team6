@@ -1,5 +1,5 @@
 import { CircleAlert, CircleHelp } from 'lucide-react'
-import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { cn } from '@/lib/cn'
 import { num } from '@/lib/format'
 
@@ -66,11 +66,18 @@ interface NumberInputProps
 /** 입력 중에는 원문을 유지하고, 포커스를 잃으면 천 단위 쉼표를 붙인다. */
 export function NumberInput({ value, onValue, suffix, decimal, className, ...props }: NumberInputProps) {
   const [draft, setDraft] = useState<string | null>(null)
+  const input = useRef<HTMLInputElement>(null)
+  const editing = draft !== null
+  // 포커스가 들어오면 쉼표가 빠지며 선택이 풀린다. 다시 전체를 골라 새 값이 뒤에 붙지 않게 한다.
+  useLayoutEffect(() => {
+    if (editing) input.current?.select()
+  }, [editing])
   const shown = draft ?? (value === null ? '' : num(value))
   return (
     <div className="relative">
       <input
         {...props}
+        ref={input}
         inputMode={decimal ? 'decimal' : 'numeric'}
         autoComplete="off"
         className={cn(controlClass, 'tabular-nums', suffix && 'pr-12', className)}
