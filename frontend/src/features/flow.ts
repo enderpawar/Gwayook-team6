@@ -102,8 +102,20 @@ function reducer(state: State, action: Action): State {
   }
 }
 
-export function useFlow() {
-  const [state, dispatch] = useReducer(reducer, initial)
+export interface FlowSeed {
+  step: number
+  product: ProductDraft
+  reference: ReferenceDraft
+  plan: PlanDraft
+}
+
+const seeded = (seed: FlowSeed | null): State =>
+  seed
+    ? { ...initial, ...seed, step: Math.min(3, Math.max(1, seed.step)) as Step, started: true }
+    : initial
+
+export function useFlow(seed: FlowSeed | null) {
+  const [state, dispatch] = useReducer(reducer, seed, seeded)
   const running = useRef<AbortController | null>(null)
   const imageUrl = useRef<string | null>(null)
   const headcount = useRef(state.plan.headcount)

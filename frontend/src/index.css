@@ -96,3 +96,14 @@
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
 }
+
+@keyframes dialog-in {
+  from {
+    transform: translateY(1.5rem) scale(0.98);
+    opacity: 0;
+  }
+}
+
+@utility dialog-in {
+  animation: dialog-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
