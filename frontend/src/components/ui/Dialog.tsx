@@ -1,5 +1,5 @@
 import { X } from 'lucide-react'
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 
 interface Props {
   title: string
@@ -11,10 +11,17 @@ interface Props {
 export function Dialog({ title, onClose, children }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
   const id = useId()
+  const [opener] = useState(() => document.activeElement)
   useEffect(() => {
     const el = ref.current
     if (el && !el.open) el.showModal()
-  }, [])
+    // 저장하고 바로 사라지는 창도 열었던 버튼으로 포커스를 돌려준다.
+    return () => {
+      queueMicrotask(() => {
+        if (el && !el.isConnected && opener instanceof HTMLElement && opener.isConnected) opener.focus()
+      })
+    }
+  }, [opener])
   return (
     <dialog
       ref={ref}

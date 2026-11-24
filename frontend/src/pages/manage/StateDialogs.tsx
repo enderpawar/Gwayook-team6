@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { DateField } from '@/components/ui/DateField'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, TextInput } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
@@ -42,7 +43,7 @@ export function PickupDialog({ gig, onClose }: Props) {
           </div>
         )}
         <Field label="수령 일시" hint="비우면 미정으로 안내해요.">
-          {(a) => <TextInput {...a} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />}
+          {(a) => <DateField {...a} label="수령 일시" mode="datetime" value={at} onChange={setAt} />}
         </Field>
         {error && <Notice tone="error">{error}</Notice>}
         <Button type="submit" className="w-full" disabled={pending || !place.trim()}>

@@ -1,8 +1,10 @@
 import { Check, MapPin } from 'lucide-react'
 import { useState } from 'react'
 import { CopyPanel } from '@/components/CopyPanel'
+import { DateField } from '@/components/ui/DateField'
 import { Field, TextInput } from '@/components/ui/Field'
 import { cn } from '@/lib/cn'
+import { nowLocal } from '@/lib/format'
 import type { Flow } from './flow'
 import { PublishPanel } from './PublishPanel'
 
@@ -77,12 +79,7 @@ export function PostStep({ flow, onPublish }: { flow: Flow; onPublish: (alias: s
           </fieldset>
           <Field label="모집 마감" hint="비우면 미정으로 표시해요.">
             {(a) => (
-              <TextInput
-                {...a}
-                type="datetime-local"
-                value={plan.deadline ?? ''}
-                onChange={(e) => actions.plan({ deadline: e.target.value || null })}
-              />
+              <DateField {...a} label="모집 마감" mode="datetime" min={nowLocal()} value={plan.deadline ?? ''} onChange={(v) => actions.plan({ deadline: v || null })} />
             )}
           </Field>
           <Field label="신청 방법" hint="비우면 ‘댓글이나 쪽지로 알려 주세요’로 들어가요.">

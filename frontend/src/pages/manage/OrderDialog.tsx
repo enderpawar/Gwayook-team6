@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { DateField } from '@/components/ui/DateField'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, TextInput } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
@@ -8,12 +9,7 @@ import { execute } from '@/domain/gig/execute'
 import { estimate, latest, orderTotal } from '@/domain/gig/select'
 import { GigError, type Command, type Gig, type OrderInput, type SettlementVersion } from '@/domain/gig/types'
 import { formatUnits, isDirectSplit, totalUnits } from '@/domain/product'
-import { won } from '@/lib/format'
-
-const localNow = () => {
-  const d = new Date()
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-}
+import { nowLocal, won } from '@/lib/format'
 
 function initialOrder(gig: Gig): OrderInput {
   const last = latest(gig)
@@ -24,7 +20,7 @@ function initialOrder(gig: Gig): OrderInput {
     shippingFee: p.shippingMode === 'separate' ? (p.shippingFee ?? 0) : 0,
     discountAmount: p.discountMode === 'apply' ? (p.discountAmount ?? 0) : 0,
     totalUnits: totalUnits(p) ?? 0,
-    orderedAt: localNow(),
+    orderedAt: nowLocal(),
   }
 }
 
@@ -113,7 +109,7 @@ export function OrderDialog({ gig, mode, onClose }: Props) {
           </Field>
         </div>
         <Field label="주문 시각">
-          {(a) => <TextInput {...a} type="datetime-local" value={order.orderedAt} onChange={(e) => set({ orderedAt: e.target.value })} />}
+          {(a) => <DateField {...a} label="주문 시각" mode="datetime" max={nowLocal()} clearable={false} value={order.orderedAt} onChange={(orderedAt) => set({ orderedAt })} />}
         </Field>
 
         <section aria-label="바뀌는 금액" aria-live="polite" className="rounded-control bg-paper p-4">

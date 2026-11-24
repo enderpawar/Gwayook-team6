@@ -25,3 +25,8 @@ export function josa(word: string, withFinal: string, withoutFinal: string): str
   const code = word.charCodeAt(word.length - 1) - 0xac00
   return word + (code >= 0 && code < 11172 && code % 28 !== 0 ? withFinal : withoutFinal)
 }
+
+/** 지금 시각을 datetime-local 형식(YYYY-MM-DDTHH:mm)으로 만든다. */
+export function nowLocal(now = new Date()): string {
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
