@@ -148,17 +148,42 @@ erDiagram
 
 ## 테이블
 
-| 테이블 | 역할 | 관련 기능 | 핵심 규칙 |
-| --- | --- | --- | --- |
-| `users` | 사용자 계정 | P1 공통 | 이메일 중복 불가, 비밀번호는 해시로만 저장. P0 방문자는 계정 없이 사용 |
-| `product_analysis` | 사용자가 확인한 대용량 상품 1건 | F-01, F-02, F-11 | Gemini 추출 필드(`fullTitle` ~ `discountAmount`)를 사용자 확인 후 저장. 미확인 숫자는 `NULL`. `total_units = pack_count × units_per_pack`(배분 단위), 비교용 환산량은 `total_units × net_amount_per_unit`. 원본 이미지는 저장하지 않음 |
-| `comparison_reference` | 소용량 비교 기준 | F-03, F-12 | 분석 1건당 0~1행. 없으면 정산만 하고 절감 지표는 보류. 출처(`PRESET`/`LINK`/`MANUAL`)와 확인일을 함께 저장 |
-| `group_buy` | 공구 (모집글 포함) | F-05, F-06, F-15, F-19 | 인원은 방장 포함 2~4명. 수령 장소·마감은 `NULL`이면 미정으로 표시. 상태는 아래 "공구 상태" 참고 |
-| `participation` | 참여 신청·승인과 수령 기록 | F-15, F-18 | `(group_buy_id, user_id)` 한 쌍당 1행. 방장도 `seat_no = 0`, `APPROVED`로 1행. 승인될 때만 `seat_no`를 받음. `(group_buy_id, seat_no)` 중복 불가 |
-| `settlement_version` | 정산 버전 (불변 스냅샷) | F-04, F-16 | 계산에 쓴 총액·수량·단위를 그대로 보관. 금액이나 인원이 바뀌면 덮어쓰지 않고 `version_no`를 올려 새 행을 만듦 |
-| `settlement_line` | 버전별 자리 한 줄 | F-04, F-07, F-16 | `(settlement_version_id, seat_no)` 중복 불가. 모집 전 예상 버전은 `participation_id`가 `NULL`일 수 있음. 참여자 재확인 시각을 기록 |
-| `payment_event` | 외부 송금·환불 이력 | F-17 | 앱은 송금하지 않고 기록만 함. `idempotency_key`가 중복 불가라 같은 클릭이 두 번 기록되지 않음. 기존 이벤트는 수정하지 않고 환불도 새 이벤트로 추가 |
-| `saving_record` | 방어한 싱글세 저금통 | F-08 | `(user_id, group_buy_id)` 한 쌍당 1행. 완료 공구 중 비교 기준이 있는 건만 기록. 환불·정정 시 같은 행을 갱신하고 기준 버전을 바꿈 |
+- `users` — 사용자 계정 (P1 공통)
+  - 이메일 중복 불가, 비밀번호는 해시로만 저장
+  - P0 방문자는 계정 없이 사용
+- `product_analysis` — 사용자가 확인한 대용량 상품 1건 (F-01, F-02, F-11)
+  - Gemini 추출 필드(`fullTitle` ~ `discountAmount`)를 사용자 확인 후 저장
+  - 미확인 숫자는 `NULL`
+  - `total_units = pack_count × units_per_pack`(배분 단위), 비교용 환산량은 `total_units × net_amount_per_unit`
+  - 원본 이미지는 저장하지 않음
+- `comparison_reference` — 소용량 비교 기준 (F-03, F-12)
+  - 분석 1건당 0~1행
+  - 없으면 정산만 하고 절감 지표는 보류
+  - 출처(`PRESET`/`LINK`/`MANUAL`)와 확인일을 함께 저장
+- `group_buy` — 공구 (모집글 포함) (F-05, F-06, F-15, F-19)
+  - 인원은 방장 포함 2~4명
+  - 수령 장소·마감은 `NULL`이면 미정으로 표시
+  - 상태는 아래 "공구 상태" 참고
+- `participation` — 참여 신청·승인과 수령 기록 (F-15, F-18)
+  - `(group_buy_id, user_id)` 한 쌍당 1행
+  - 방장도 `seat_no = 0`, `APPROVED`로 1행
+  - 승인될 때만 `seat_no`를 받음
+  - `(group_buy_id, seat_no)` 중복 불가
+- `settlement_version` — 정산 버전 (불변 스냅샷) (F-04, F-16)
+  - 계산에 쓴 총액·수량·단위를 그대로 보관
+  - 금액이나 인원이 바뀌면 덮어쓰지 않고 `version_no`를 올려 새 행을 만듦
+- `settlement_line` — 버전별 자리 한 줄 (F-04, F-07, F-16)
+  - `(settlement_version_id, seat_no)` 중복 불가
+  - 모집 전 예상 버전은 `participation_id`가 `NULL`일 수 있음
+  - 참여자 재확인 시각을 기록
+- `payment_event` — 외부 송금·환불 이력 (F-17)
+  - 앱은 송금하지 않고 기록만 함
+  - `idempotency_key`가 중복 불가라 같은 클릭이 두 번 기록되지 않음
+  - 기존 이벤트는 수정하지 않고 환불도 새 이벤트로 추가
+- `saving_record` — 방어한 싱글세 저금통 (F-08)
+  - `(user_id, group_buy_id)` 한 쌍당 1행
+  - 완료 공구 중 비교 기준이 있는 건만 기록
+  - 환불·정정 시 같은 행을 갱신하고 기준 버전을 바꿈
 
 ## 계산 규칙
 
