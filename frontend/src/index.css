@@ -1,0 +1,98 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Wanted Sans Variable', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-display: 'Bagel Fat One', 'Wanted Sans Variable', sans-serif;
+
+  --color-paper: #edf1f7;
+  --color-surface: #ffffff;
+  --color-ink: #0e1b3d;
+  --color-ink-soft: #4a5675;
+  --color-line: #cfd8e6;
+  --color-cobalt: #2454e6;
+  --color-cobalt-deep: #1a3fb4;
+  --color-cobalt-wash: #e4ebff;
+  --color-tag: #ffd43b;
+  --color-tag-deep: #f2bd00;
+  --color-danger: #b3261e;
+  --color-danger-wash: #fdeceb;
+  --color-neutral-bar: #8792ab;
+
+  --color-seat-0: #2454e6;
+  --color-seat-1: #e26a12;
+  --color-seat-2: #17a398;
+  --color-seat-3: #8e2a6b;
+
+  --radius-control: 0.625rem;
+  --radius-panel: 1.25rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* 스티커가 찍히는 동안 가로 스크롤이 생기지 않게 한다. */
+  #root {
+    overflow-x: clip;
+  }
+  button:not(:disabled),
+  [role='radio'] {
+    cursor: pointer;
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-cobalt);
+    outline-offset: 2px;
+  }
+  h1:focus {
+    outline: none;
+  }
+}
+
+/* 절취선이 있는 티켓. 양옆 반원 홈의 높이를 --notch 로 정한다. */
+@utility ticket {
+  --r: 10px;
+  background: var(--color-surface);
+  border-radius: var(--radius-panel);
+  mask:
+    radial-gradient(circle var(--r) at 0 var(--notch), #0000 98%, #000) 0 0 / 51% 100% no-repeat,
+    radial-gradient(circle var(--r) at 100% var(--notch), #0000 98%, #000) 100% 0 / 51% 100% no-repeat;
+}
+
+@keyframes scan {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+
+@utility animate-scan {
+  animation: scan 1.5s ease-in-out infinite alternate;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@utility select-chevron {
+  appearance: none;
+  padding-right: 2.75rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%230e1b3d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 8 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+}
