@@ -1,6 +1,6 @@
 # 긱스플리터 프론트엔드
 
-기능정의서 [v1.1](../docs/GigSplitter-PRD-v1.1.md)의 P0(F-01~F-06, F-09, F-11~F-13)를 구현한 모바일 우선 웹 앱입니다.
+기능정의서 [v1.1](../docs/GigSplitter-PRD-v1.1.md)의 P0와 P1을 구현한 모바일 우선 웹 앱입니다.
 
 ## 실행
 
@@ -12,41 +12,34 @@ npm test
 npm run build
 ```
 
-`dev:mock`에서는 올린 파일 이름으로 상황을 고릅니다. `multi`는 가격 후보 여러 개, `bad`는 잘못된 JSON, `503`은 서버 오류, `timeout`은 시간 초과입니다.
+`dev:mock`에서는 올린 파일 이름으로 상황을 고릅니다. `multi`는 가격·옵션 후보 여러 개, `bad`는 잘못된 JSON, `503`은 서버 오류, `timeout`은 시간 초과입니다.
 
 ## 구조
 
-- `src/domain` 정산, 단가 비교, 모집글 계산. React에 의존하지 않습니다.
+- `src/domain` 정산, 단가 비교, 모집글, 공구 운영 규칙. React에 의존하지 않습니다.
+- `src/data` 공구 저장소
+- `src/pages` 내 공구, 방장 관리, 참여자 초대, 저금통
 - `src/api` 이미지 검사와 추출 요청
 - `src/features` 단계별 화면과 상태
 - `src/components` 공통 UI
 - `mock` 개발용 모의 응답
 
-## 백엔드 API (제안)
+## 백엔드 연결
 
-`POST /api/extractions`, `multipart/form-data`, 필드 이름 `image`. 주소는 `VITE_API_BASE_URL`로 바꿉니다. 스키마는 `src/api/extraction.ts`에 있습니다.
+`npm run dev`는 `/api`를 `http://127.0.0.1:3001`(`backend/`, `npm start`)로 보냅니다. 다른 주소는 `VITE_API_BASE_URL`로 바꿉니다.
 
-```json
-{
-  "fullTitle": "생수 2L 24병",
-  "shortName": "생수",
-  "selectedOption": null,
-  "packCount": 4,
-  "unitsPerPack": 6,
-  "netAmountPerUnit": { "value": 2, "unit": "L" },
-  "unitName": "병",
-  "displayedTotalPrice": 16800,
-  "shippingFee": null,
-  "discountAmount": 0,
-  "priceCandidates": [{ "amount": 16800, "kind": "판매가", "condition": null, "evidence": "16,800원" }],
-  "evidence": {},
-  "unresolvedFields": ["shippingFee"]
-}
-```
+- 캡처 분석: `POST /api/products/extract` (`image`, `people`). 현재 백엔드 응답과 v1.1 응답을 모두 읽습니다.
+- 422 `MANUAL_CORRECTION_REQUIRED`는 읽은 값을 남기고 나머지를 미확인으로 표시합니다.
+- 502·503·504와 네트워크 오류는 한 번 재시도하고, `GEMINI_NOT_CONFIGURED`는 바로 직접 입력으로 안내합니다. 전체 제한 시간은 15초, 이미지는 5MB 이하입니다.
+- 서버가 찾은 비교 값은 사용자가 규격을 확인하기 전까지 절감률에 쓰지 않습니다.
+- 옵션 후보는 `optionCandidates: string[]`로 받으면 고를 수 있습니다. 아직 백엔드 계약에는 없습니다.
+- 정산과 모집글은 PRD v1.1 4장에 따라 화면에서 계산합니다. `POST /api/analyses`는 균등 분할이라 쓰지 않습니다.
 
-- 확인하지 못한 값은 `null`로 보냅니다. `netAmountPerUnit.unit`은 `ml`, `L`, `g`, `kg`, `m` 중 하나입니다.
-- 502, 503, 504와 네트워크 오류는 한 번 재시도합니다. 전체 제한 시간은 15초입니다.
-- 429는 호출 한도, 400·413·415·422는 분석할 수 없는 이미지로 안내합니다.
+## 공구 운영 (P1)
+
+`src/domain/gig`에 상태 전환, 승인 정원, 정산 버전, 송금·환불, 저금통 규칙이 있습니다. 저장은 `src/data/store.ts`의 `GigStore` 인터페이스를 거칩니다.
+
+**지금은 브라우저 저장소(`localStore.ts`)로만 동작합니다.** 다른 기기와 공유되지 않고, 권한 검사도 브라우저 안에서 이루어져 실제 보안이 되지 않습니다. 운영 전에는 같은 규칙을 서버에서 검사하고 인증을 붙인 뒤 `GigStore` 구현을 교체해야 합니다.
 
 ## ERD와 다른 점
 
