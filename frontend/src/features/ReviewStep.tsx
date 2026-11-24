@@ -1,11 +1,13 @@
 import { Field, NumberInput, TextInput } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
 import { Segmented } from '@/components/ui/Segmented'
+import { formatUnits } from '@/domain/product'
 import type { DiscountMode, FieldName, ShippingMode } from '@/domain/types'
 import { josa, won } from '@/lib/format'
 import type { Flow } from './flow'
 import { MeasureFields } from './MeasureFields'
-import { PriceCandidates } from './PriceCandidates'
+import { OptionCandidates, PriceCandidates } from './PriceCandidates'
+import { SplitModeFields } from './SplitModeFields'
 import { ReferenceForm } from './ReferenceForm'
 
 const INTRO = {
@@ -47,6 +49,13 @@ export function ReviewStep({ flow }: { flow: Flow }) {
                 {(a) => <TextInput {...a} value={p.selectedOption} maxLength={200} onChange={(e) => actions.product({ selectedOption: e.target.value })} />}
               </Field>
             </div>
+            {p.optionCandidates.length > 1 && (
+              <OptionCandidates
+                candidates={p.optionCandidates}
+                selected={p.selectedOption}
+                onSelect={(selectedOption) => actions.product({ selectedOption })}
+              />
+            )}
             <div className="grid grid-cols-3 items-start gap-3">
               <Field label="묶음 수" error={err('packCount', p.packCount)} unresolved={unresolved('packCount')}>
                 {(a) => <NumberInput {...a} value={p.packCount} onValue={(v) => actions.product({ packCount: v })} />}
@@ -60,8 +69,7 @@ export function ReviewStep({ flow }: { flow: Flow }) {
             </div>
             {units !== null && (
               <p className="text-sm font-semibold">
-                전체 {units}
-                {josa(p.unitName || '개', '을', '를')} 나눠요.
+                전체 {josa(formatUnits(p, units) || String(units), '을', '를')} 나눠요.
               </p>
             )}
             <MeasureFields
@@ -70,12 +78,11 @@ export function ReviewStep({ flow }: { flow: Flow }) {
               net={p.netAmountPerUnit}
               unitName={p.unitName}
               unresolved={unresolved('netAmountPerUnit') && p.measure !== 'count'}
+              error={problems.netAmountPerUnit}
               onMeasure={(measure) => actions.product({ measure })}
               onNet={(netAmountPerUnit) => actions.product({ netAmountPerUnit })}
             />
-            <Notice>
-              액체나 세제는 뜯지 않은 포장 단위로 나누세요. 큰 용기 하나를 덜어 나누는 방식은 지원하지 않아요.
-            </Notice>
+            <SplitModeFields flow={flow} />
 
             <hr className="border-line" />
             {p.priceCandidates.length > 0 && (

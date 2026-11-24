@@ -14,11 +14,12 @@ interface MeasureProps {
   net: number | null
   unitName: string
   unresolved?: boolean
+  error?: string
   onMeasure: (m: Measure) => void
   onNet: (n: number | null) => void
 }
 
-export function MeasureFields({ label, measure, net, unitName, unresolved, onMeasure, onNet }: MeasureProps) {
+export function MeasureFields({ label, measure, net, unitName, unresolved, error, onMeasure, onNet }: MeasureProps) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label={label}>
@@ -33,7 +34,7 @@ export function MeasureFields({ label, measure, net, unitName, unresolved, onMea
         )}
       </Field>
       {measure !== 'count' && (
-        <Field label={`1${unitName || '개'}의 양`} unresolved={unresolved}>
+        <Field label={`1${unitName || '개'}의 양`} unresolved={unresolved} error={error}>
           {(a) => <NumberInput {...a} decimal suffix={measure} value={net} onValue={onNet} />}
         </Field>
       )}

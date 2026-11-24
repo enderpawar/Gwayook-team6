@@ -10,24 +10,26 @@ interface Props {
   /** 자리별 수량. 하나뿐이면 아직 나누지 않은 묶음으로 보여준다. */
   allocation: number[]
   unitName: string
+  /** 수량 표시 방법. 없으면 단위를 그대로 붙인다. */
+  format?: (units: number) => string
   className?: string
 }
 
 /** 상품을 낱개로 펼쳐 인원별 더미로 옮겨 보여주는 판. 수량이 많으면 비율 막대로 바꾼다. */
-export function SplitBoard({ allocation, unitName, className }: Props) {
+export function SplitBoard({ allocation, unitName, format = (n) => `${n}${unitName}`, className }: Props) {
   const groupId = useId()
   const total = allocation.reduce((a, b) => a + b, 0)
   const whole = allocation.length === 1
   const label = whole
-    ? `전체 ${total}${unitName}`
-    : allocation.map((n, seat) => `${seatName(seat)} ${n}${unitName}`).join(', ')
+    ? `전체 ${format(total)}`
+    : allocation.map((n, seat) => `${seatName(seat)} ${format(n)}`).join(', ')
 
   const piles = useMemo(() => {
     let next = 0
     return allocation.map((n) => Array.from({ length: n }, () => next++))
   }, [allocation])
 
-  if (total > MAX_TOKENS) return <RatioBars allocation={allocation} unitName={unitName} label={label} className={className} />
+  if (total > MAX_TOKENS) return <RatioBars allocation={allocation} format={format} label={label} className={className} />
 
   return (
     <LayoutGroup id={groupId}>
@@ -42,8 +44,7 @@ export function SplitBoard({ allocation, unitName, className }: Props) {
             <motion.p layout="position" className="flex items-baseline justify-between gap-2 text-sm">
               <span className="font-semibold">{whole ? '한 묶음' : seatName(seat)}</span>
               <span className="font-display text-lg tabular-nums">
-                {units.length}
-                {unitName}
+                {format(units.length)}
               </span>
             </motion.p>
             <div className="mt-2 flex min-h-14 flex-wrap content-start gap-1">
@@ -65,7 +66,7 @@ export function SplitBoard({ allocation, unitName, className }: Props) {
   )
 }
 
-function RatioBars({ allocation, unitName, label, className }: Props & { label: string }) {
+function RatioBars({ allocation, format, label, className }: { allocation: number[]; format: (n: number) => string; label: string; className?: string }) {
   const max = Math.max(...allocation)
   return (
     <div role="img" aria-label={label} className={cn('space-y-3 rounded-control bg-surface p-4', className)}>
@@ -74,8 +75,7 @@ function RatioBars({ allocation, unitName, label, className }: Props & { label: 
           <p className="flex justify-between text-sm">
             <span className="font-semibold">{allocation.length === 1 ? '한 묶음' : seatName(seat)}</span>
             <span className="tabular-nums">
-              {n}
-              {unitName}
+              {format(n)}
             </span>
           </p>
           <motion.div
