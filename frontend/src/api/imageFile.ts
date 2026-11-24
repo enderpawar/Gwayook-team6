@@ -1,4 +1,4 @@
-export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 export const ACCEPTED_IMAGES = 'image/jpeg,image/png,image/webp'
 
 export type ImageCheck = { ok: true } | { ok: false; message: string }
@@ -19,7 +19,7 @@ export function sniffImage(bytes: Uint8Array): 'jpeg' | 'png' | 'webp' | null {
 export async function checkImage(file: File): Promise<ImageCheck> {
   if (file.size === 0) return { ok: false, message: '빈 파일이에요. 다른 이미지를 골라 주세요.' }
   if (file.size > MAX_IMAGE_BYTES) {
-    return { ok: false, message: '10MB 이하 이미지만 올릴 수 있어요. 필요한 부분만 잘라 다시 올려 주세요.' }
+    return { ok: false, message: '5MB 이하 이미지만 올릴 수 있어요. 필요한 부분만 잘라 다시 올려 주세요.' }
   }
   const head = new Uint8Array(await file.slice(0, 16).arrayBuffer())
   if (!sniffImage(head)) {

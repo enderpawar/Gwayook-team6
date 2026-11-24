@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react'
-import { ExtractionError, extractProduct, toProductDraft } from '@/api/extraction'
+import { ExtractionError, extractProduct } from '@/api/extraction'
 import { checkImage } from '@/api/imageFile'
 import { compare } from '@/domain/comparison'
 import { buildPost } from '@/domain/post'
@@ -63,7 +63,7 @@ function reducer(state: State, action: Action): State {
         product: action.product,
         reference:
           action.reference ??
-          (state.reference.sourceKind === 'preset' ? blankReference() : state.reference),
+          (state.reference.sourceKind === 'manual' || state.reference.sourceKind === 'link' ? state.reference : blankReference()),
       }
     case 'manual':
       return {
@@ -90,10 +90,11 @@ function reducer(state: State, action: Action): State {
       }
     }
     case 'reference': {
-      const own = state.reference.sourceKind === 'preset' && 'price' in action.patch
+      // 비교 값을 고치면 원래 출처를 붙이지 않는다.
+      const own = ['preset', 'serverPreset', 'capture'].includes(state.reference.sourceKind) && ['price', 'unitCount', 'netAmountPerUnit', 'measure'].some((k) => k in action.patch)
       return {
         ...state,
-        reference: { ...state.reference, ...(own ? { sourceKind: 'manual' } : {}), ...action.patch },
+        reference: { ...state.reference, ...(own ? { sourceKind: 'manual' as const, sourceUrl: '' } : {}), ...action.patch },
       }
     }
     case 'plan':
@@ -105,6 +106,8 @@ export function useFlow() {
   const [state, dispatch] = useReducer(reducer, initial)
   const running = useRef<AbortController | null>(null)
   const imageUrl = useRef<string | null>(null)
+  const headcount = useRef(state.plan.headcount)
+  headcount.current = state.plan.headcount
 
   const cancel = useCallback(() => {
     running.current?.abort()
@@ -150,10 +153,10 @@ export function useFlow() {
       running.current = controller
       dispatch({ type: 'analysis', analysis: { status: 'loading' } })
       try {
-        const result = await extractProduct(file, { signal: controller.signal })
+        const result = await extractProduct(file, { signal: controller.signal, people: headcount.current })
         // 이미지를 바꿨다면 이전 응답은 버린다.
         if (running.current !== controller) return
-        dispatch({ type: 'load', product: toProductDraft(result) })
+        dispatch({ type: 'load', product: result.product, reference: result.reference ?? undefined })
       } catch (error) {
         if (running.current !== controller) return
         const message =

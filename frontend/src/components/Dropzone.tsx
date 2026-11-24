@@ -89,7 +89,7 @@ export function Dropzone({ image, loading, onSelect, onRemove, onAnalyze }: Prop
             <ImageUp className="size-7" />
           </motion.span>
           <span className="mt-3 font-bold">{over ? '여기에 놓으세요' : '캡처 이미지 선택'}</span>
-          <span className="mt-1 text-sm text-ink-soft">JPG, PNG, WebP 한 장, 10MB 이하</span>
+          <span className="mt-1 text-sm text-ink-soft">JPG, PNG, WebP 한 장, 5MB 이하</span>
         </label>
       )}
     </div>

@@ -18,6 +18,7 @@ const base = {
   displayedTotalPrice: 15900,
   shippingFee: null,
   discountAmount: 0,
+  optionCandidates: [],
   priceCandidates: [],
   evidence: {},
   unresolvedFields: ['shippingFee'],
@@ -25,13 +26,13 @@ const base = {
 
 /**
  * 백엔드가 준비되기 전 개발용 모의 응답. `npm run dev:mock` 에서만 켜진다.
- * 파일 이름으로 상황을 고른다: multi(가격 후보 여러 개), bad(잘못된 JSON), timeout, 503
+ * 파일 이름으로 상황을 고른다: multi(가격·옵션 후보 여러 개), bad(잘못된 JSON), timeout, 503
  */
 export function mockExtraction(): Plugin {
   return {
     name: 'mock-extraction',
     configureServer(server) {
-      server.middlewares.use('/api/extractions', (req, res) => {
+      server.middlewares.use('/api/products/extract', (req, res) => {
         const chunks: Buffer[] = []
         req.on('data', (c: Buffer) => chunks.push(c))
         req.on('end', () => {
@@ -49,6 +50,8 @@ export function mockExtraction(): Plugin {
                 name.includes('multi')
                   ? {
                       ...base,
+                      selectedOption: null,
+                      optionCandidates: ['150매 x 12롤', '200매 x 12롤'],
                       displayedTotalPrice: null,
                       priceCandidates: [price(15900, '판매가', null), price(13900, '쿠폰 적용가', '첫 구매 쿠폰')],
                     }

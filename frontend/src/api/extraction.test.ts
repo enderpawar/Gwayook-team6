@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ExtractionError, extractProduct, parseExtraction, toProductDraft, type Extraction } from './extraction'
+import { ExtractionError, extractProduct, parseResponse, toProductDraft, type Extraction } from './extraction'
 import { checkImage, sniffImage } from './imageFile'
 
 const good: Extraction = {
@@ -9,16 +9,20 @@ const good: Extraction = {
 }
 const file = new File(['x'], 'a.png')
 const run = (fetchImpl: typeof fetch, extra = {}) =>
-  extractProduct(file, { signal: new AbortController().signal, retryDelayMs: 1, fetchImpl, ...extra })
+  extractProduct(file, { signal: new AbortController().signal, people: 4, retryDelayMs: 1, fetchImpl, ...extra })
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 
 describe('extractProduct', () => {
   it('정상 응답을 돌려준다', async () => {
-    await expect(run(vi.fn(async () => json(good)))).resolves.toEqual(good)
+    const f = vi.fn(async () => json(good))
+    await expect(run(f)).resolves.toMatchObject({ product: { fullTitle: '생수 2L 24병' }, reference: null })
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/products/extract')
+    expect((init.body as FormData).get('people')).toBe('4')
   })
   it('503 은 한 번만 재시도한다', async () => {
     const ok = vi.fn().mockResolvedValueOnce(json({}, 503)).mockResolvedValueOnce(json(good))
-    await expect(run(ok)).resolves.toEqual(good)
+    await expect(run(ok)).resolves.toMatchObject({ product: { unitsPerPack: 6 } })
     const fail = vi.fn(async () => json({}, 503))
     await expect(run(fail)).rejects.toMatchObject({ kind: 'server' })
     expect(fail).toHaveBeenCalledTimes(2)
@@ -30,7 +34,7 @@ describe('extractProduct', () => {
   })
   it('잘못된 JSON 과 스키마 위반은 invalid', async () => {
     await expect(run(vi.fn(async () => new Response('<html>')))).rejects.toMatchObject({ kind: 'invalid' })
-    expect(() => parseExtraction(JSON.stringify({ ...good, packCount: -1 }))).toThrow(ExtractionError)
+    expect(() => parseResponse(JSON.stringify({ ...good, packCount: -1 }))).toThrow(ExtractionError)
   })
   const hang: typeof fetch = (_, init) =>
     new Promise((_r, reject) => init!.signal!.addEventListener('abort', () => reject(init!.signal!.reason)))
@@ -39,7 +43,7 @@ describe('extractProduct', () => {
   })
   it('사용자가 교체하면 AbortError', async () => {
     const c = new AbortController()
-    const p = extractProduct(file, { signal: c.signal, fetchImpl: hang })
+    const p = extractProduct(file, { signal: c.signal, people: 4, fetchImpl: hang })
     c.abort()
     await expect(p).rejects.toMatchObject({ name: 'AbortError' })
   })
@@ -69,5 +73,43 @@ describe('이미지 검사', () => {
   it('이름만 png 인 파일을 거른다', async () => {
     expect((await checkImage(new File(['hello'], 'a.png', { type: 'image/png' }))).ok).toBe(false)
     expect((await checkImage(new File([], 'a.png'))).ok).toBe(false)
+  })
+})
+
+describe('현재 백엔드(v1.0) 응답', () => {
+  const body = { product: { shortName: '휴지', fullTitle: '휴지 30롤', bulkTotalQty: 30, bulkTotalPrice: 17701, unitName: '롤', smallPackQty: 6, smallPackPrice: 7800 }, comparisonSource: { kind: 'PRESET', label: '33m 12롤', url: 'https://example.com' } }
+  it('비교 값은 규격 확인 전 상태로 가져온다', () => {
+    const d = parseResponse(JSON.stringify(body))
+    expect(d.product).toMatchObject({ packCount: 1, unitsPerPack: 30, displayedPrice: 17701, shippingMode: 'unknown' })
+    expect(d.reference).toMatchObject({ price: 7800, unitCount: 6, sameSpecConfirmed: false, sourceKind: 'serverPreset' })
+  })
+  it('422 부분 판독은 읽은 값만 남긴다', async () => {
+    const f = vi.fn(async () => json({ code: 'MANUAL_CORRECTION_REQUIRED', product: { fullTitle: '휴지', bulkTotalPrice: 100 }, fields: ['bulkTotalQty'], comparisonSource: null }, 422))
+    const d = await run(f)
+    expect(d.product).toMatchObject({ fullTitle: '휴지', packCount: null })
+    expect(d.product.unresolvedFields).toContain('packCount')
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+  it('총 용량만 알면 포장 수를 지어내지 않는다', () => {
+    const d = parseResponse(JSON.stringify({ product: { ...body.product, unitName: 'ml', bulkTotalQty: 4000 }, comparisonSource: null }))
+    expect(d.product).toMatchObject({ packCount: null, unitsPerPack: null, unitName: '', measure: 'ml' })
+  })
+  it('아무것도 못 읽으면 invalid, 잘못된 입력 422 는 rejected', async () => {
+    expect(() => parseResponse(JSON.stringify({ product: {}, comparisonSource: null }))).toThrow(ExtractionError)
+    await expect(run(vi.fn(async () => json({ code: 'INVALID_ANALYSIS_INPUT' }, 422)))).rejects.toMatchObject({ kind: 'rejected' })
+  })
+  it('키가 없는 서버는 재시도하지 않고, 504 는 시간 초과로 알린다', async () => {
+    const f = vi.fn(async () => json({ code: 'GEMINI_NOT_CONFIGURED' }, 503))
+    await expect(run(f)).rejects.toMatchObject({ kind: 'notReady' })
+    expect(f).toHaveBeenCalledTimes(1)
+    await expect(run(vi.fn(async () => json({ code: 'GEMINI_TIMEOUT' }, 504)))).rejects.toMatchObject({ kind: 'timeout' })
+  })
+})
+
+describe('옵션 후보', () => {
+  it('여러 개면 고르기 전까지 미확인으로 둔다', () => {
+    const d = toProductDraft({ ...good, optionCandidates: ['24병', '48병'] })
+    expect(d).toMatchObject({ selectedOption: '', optionCandidates: ['24병', '48병'] })
+    expect(d.unresolvedFields).toContain('selectedOption')
   })
 })

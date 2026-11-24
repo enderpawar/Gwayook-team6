@@ -63,6 +63,12 @@ export function ReferenceForm({ flow }: { flow: Flow }) {
 
         <hr className="border-line" />
         {r.sourceKind === 'preset' && <Notice>가격 출처: 시연용 예시 값. 실제 판매 가격이 아니에요.</Notice>}
+        {r.sourceKind === 'serverPreset' && (
+          <Notice tone="warn">서버의 시연 데이터에서 가져온 비교 값이에요. 규격이 같은지 직접 확인해 주세요.</Notice>
+        )}
+        {r.sourceKind === 'capture' && (
+          <Notice tone="warn">캡처에서 읽은 비교 값이에요. 가격과 규격이 맞는지 확인해 주세요.</Notice>
+        )}
         <Field
           label="가격 출처 링크"
           hint="선택 사항이에요. 비우면 직접 입력한 가격으로 표시해요."
