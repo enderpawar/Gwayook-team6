@@ -1,6 +1,6 @@
 # 긱스플리터 백엔드 구현 계획
 
-기준: `origin/main`의 [ERD](https://github.com/enderpawar/Gwayook-team6/blob/8bf223543603fe7095e455103e47b3d3646f5e1e/docs/ERD.md), [PRD v1.1](https://github.com/enderpawar/Gwayook-team6/blob/8bf223543603fe7095e455103e47b3d3646f5e1e/docs/GigSplitter-PRD-v1.1.md), [갱신된 v1.0 PDF](https://github.com/enderpawar/Gwayook-team6/blob/8bf223543603fe7095e455103e47b3d3646f5e1e/docs/GigSplitter-PRD-v1.0.pdf) (`8bf2235`, PR #2). **계획 기준은 P0 사용자 동작과 계산에 PRD v1.1, 운영용 데이터의 출발점에 ERD, 판독 모델에 갱신 PDF와 ERD의 `gemini-3.8-flash`다.** 서로 다른 규칙은 아래에 따로 표시했다.
+기준: `origin/main`의 [ERD](https://github.com/enderpawar/Gwayook-team6/blob/a3c59340272ec4b6c6592ea96f1840c548147371/docs/ERD.md), [PRD v1.1](https://github.com/enderpawar/Gwayook-team6/blob/a3c59340272ec4b6c6592ea96f1840c548147371/docs/GigSplitter-PRD-v1.1.md), [갱신된 v1.0 PDF](https://github.com/enderpawar/Gwayook-team6/blob/a3c59340272ec4b6c6592ea96f1840c548147371/docs/GigSplitter-PRD-v1.0.pdf) (`a3c5934`). **P0 사용자 동작과 계산은 PRD v1.1, 운영용 데이터는 ERD를 기준으로 계획한다.** 세 문서에 맞춰 판독 모델은 `gemini-3.8-flash`로 전환할 계획이다. 서로 다른 규칙은 아래에 따로 표시했다.
 
 ## P0 — 로그인·DB 없는 시연 경로
 
