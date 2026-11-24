@@ -1,9 +1,18 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GigError } from '@/domain/gig/types'
+import { createHttpStore, p1Available } from './httpStore'
 import { createLocalStore } from './localStore'
 import type { GigStore } from './store'
 
-export const store: GigStore = createLocalStore({ shared: localStorage, session: sessionStorage })
+const local = createLocalStore({ shared: localStorage, session: sessionStorage })
+
+/** 화면을 그리기 전에 initStore 가 정한다. */
+export let store: GigStore = local
+
+/** P1 서버가 켜져 있으면 서버를, 아니면 브라우저 저장소를 쓴다. */
+export async function initStore(): Promise<void> {
+  if (await p1Available()) store = createHttpStore({ shared: localStorage, session: sessionStorage, drafts: local })
+}
 
 export type Query<T> =
   | { status: 'loading' }
@@ -71,6 +80,6 @@ export function useAction() {
 const snapshot = () => JSON.stringify([store.me(), store.people()])
 
 export function usePeople() {
-  useSyncExternalStore(store.subscribe, snapshot)
-  return { me: store.me(), people: store.people() }
+  useSyncExternalStore((l) => store.subscribe(l), snapshot)
+  return { me: store.me(), people: store.people(), user: store.auth?.user() ?? null }
 }

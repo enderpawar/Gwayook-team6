@@ -1,14 +1,24 @@
 import { SavingsJar } from '@/components/SavingsJar'
 import { AnimatedNumber } from '@/components/AnimatedNumber'
+import { LoginPrompt } from '@/components/LoginPrompt'
 import { store, usePeople, useQuery } from '@/data/useStore'
 import { won } from '@/lib/format'
+import { href } from '@/lib/router'
 import { PageError, PageLoading } from './PageState'
 
 export function SavingsPage() {
-  const { me } = usePeople()
+  const { me, user } = usePeople()
   const query = useQuery(() => store.savings(), `savings:${me.id}`)
   if (query.status === 'error') return <PageError title="저금통을 열 수 없어요" message={query.message} />
   if (query.status === 'loading') return <PageLoading />
+  if (!store.local && !user) {
+    return (
+      <div className="py-5">
+        <h1 className="mb-6 font-display text-3xl sm:text-4xl">절약 저금통</h1>
+        <LoginPrompt text="로그인하면 지금까지 아낀 금액을 볼 수 있어요." next={href.savings} />
+      </div>
+    )
+  }
   const { total, entries } = query.data
   const counted = entries.filter((e) => !e.pending)
   return (
@@ -34,7 +44,7 @@ export function SavingsPage() {
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{e.name}</span>
                     <span className="block text-sm text-ink-soft">
-                      {e.pending ? '금액 정리가 끝나면 더해요' : `${new Date(e.completedAt).toLocaleDateString('ko-KR')} 기준`}
+                      {e.pending ? '금액 정리가 끝나면 더해요' : e.completedAt ? `${new Date(e.completedAt).toLocaleDateString('ko-KR')} 기준` : '완료'}
                     </span>
                   </span>
                   <span className="shrink-0 font-bold tabular-nums">

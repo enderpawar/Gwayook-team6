@@ -1,6 +1,7 @@
-import { Plus, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { DateField } from '@/components/ui/DateField'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, NumberInput, TextInput } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
@@ -8,7 +9,7 @@ import { Segmented } from '@/components/ui/Segmented'
 import { store, useAction } from '@/data/useStore'
 import { approved } from '@/domain/gig/select'
 import type { Gig } from '@/domain/gig/types'
-import { formatDeadline } from '@/lib/format'
+import { formatDeadline, nowLocal } from '@/lib/format'
 
 export function ConditionsDialog({ gig, onClose }: { gig: Gig; onClose: () => void }) {
   const min = Math.max(2, approved(gig).length + 1)
@@ -17,7 +18,6 @@ export function ConditionsDialog({ gig, onClose }: { gig: Gig; onClose: () => vo
   const [place, setPlace] = useState(gig.plan.place ?? '')
   const [deadline, setDeadline] = useState(gig.plan.deadline ?? '')
   const [candidates, setCandidates] = useState(gig.pickupCandidates)
-  const [draft, setDraft] = useState('')
   const { run, pending, error } = useAction()
 
   return (
@@ -34,13 +34,13 @@ export function ConditionsDialog({ gig, onClose }: { gig: Gig; onClose: () => vo
                 place,
                 pickupCandidates: candidates,
                 ...(deadline !== (gig.plan.deadline ?? '') ? { deadline: deadline || null } : {}),
-                ...(price !== null && price !== gig.product.displayedPrice ? { displayedPrice: price } : {}),
+                ...(store.local && price !== null && price !== gig.product.displayedPrice ? { displayedPrice: price } : {}),
               },
             }),
           ).then((ok) => ok && onClose())
         }}
       >
-        <p className="text-sm text-ink-soft">바꾼 시각이 초대 링크에 표시돼요.</p>
+        <p className="text-sm text-ink-soft">{store.local ? '바꾼 시각이 초대 링크에 표시돼요.' : '수령 후보는 신청 마감보다 늦어야 해요.'}</p>
         <div>
           <p aria-hidden className="mb-1.5 text-sm font-semibold">
             목표 인원 (방장 포함)
@@ -53,33 +53,31 @@ export function ConditionsDialog({ gig, onClose }: { gig: Gig; onClose: () => vo
           />
           {min > 2 && <p className="mt-1.5 text-sm text-ink-soft">이미 승인한 참여자가 있어 {min}명부터 고를 수 있어요.</p>}
         </div>
-        <Field label="상품 금액">
-          {(a) => <NumberInput {...a} suffix="원" value={price} onValue={setPrice} />}
-        </Field>
+        {store.local && (
+          <Field label="상품 금액">
+            {(a) => <NumberInput {...a} suffix="원" value={price} onValue={setPrice} />}
+          </Field>
+        )}
         <Field label="수령 장소" hint="비우면 미정으로 표시해요.">
           {(a) => <TextInput {...a} value={place} maxLength={100} onChange={(e) => setPlace(e.target.value)} />}
         </Field>
-        <Field label="신청 마감" hint="비우면 미정으로 표시해요.">
-          {(a) => <TextInput {...a} type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />}
+        <Field label="신청 마감" hint={store.local ? '비우면 미정으로 표시해요.' : undefined}>
+          {(a) => <DateField {...a} label="신청 마감" mode="datetime" min={nowLocal()} clearable={store.local} value={deadline} onChange={setDeadline} />}
         </Field>
         <div>
-          <div className="flex items-end gap-2">
-            <Field label="수령 후보 일시" className="flex-1">
-              {(a) => <TextInput {...a} type="datetime-local" value={draft} onChange={(e) => setDraft(e.target.value)} />}
-            </Field>
-            <Button
-              variant="outline"
-              aria-label="수령 후보 추가"
-              className="px-4"
-              disabled={!draft || candidates.includes(draft) || candidates.length >= 5}
-              onClick={() => {
-                setCandidates((c) => [...c, draft].sort())
-                setDraft('')
-              }}
-            >
-              <Plus aria-hidden className="size-5" />
-            </Button>
-          </div>
+          <Field label="수령 후보 일시" hint="고르면 아래에 추가돼요. 5개까지 넣을 수 있어요.">
+            {(a) => (
+              <DateField
+                {...a}
+                label="수령 후보 일시"
+                mode="datetime"
+                min={deadline || nowLocal()}
+                clearable={false}
+                value=""
+                onChange={(v) => setCandidates((c) => (c.includes(v) || c.length >= 5 ? c : [...c, v].sort()))}
+              />
+            )}
+          </Field>
           <ul className="mt-2 flex flex-wrap gap-2">
             {candidates.map((c) => (
               <li key={c} className="inline-flex items-center rounded-full bg-paper pl-4 text-sm font-semibold">

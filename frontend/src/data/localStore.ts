@@ -89,6 +89,7 @@ export function createLocalStore({ shared, session }: Storages): GigStore {
 
   return {
     local: true,
+    auth: null,
     me,
     people,
     switchTo: setCurrent,
@@ -133,7 +134,7 @@ export function createLocalStore({ shared, session }: Storages): GigStore {
         replace({ ...existing, ...input, updatedAt: new Date().toISOString() })
         return
       }
-      write(GIGS, [...list, createGig({ ...input, inviteCode: newId().slice(0, 12), hostId: me().id, now: new Date() })])
+      write(GIGS, [...list, createGig({ ...input, inviteCode: newId().replaceAll('-', '').slice(0, 12), hostId: me().id, now: new Date() })])
     },
     async deleteDraft(id) {
       const gig = gigs().find((g) => g.id === id)
@@ -141,6 +142,10 @@ export function createLocalStore({ shared, session }: Storages): GigStore {
       if (gig.hostId !== me().id) throw new GigError('forbidden', '내 초안이 아니에요.')
       if (gig.status !== 'draft') throw new GigError('badStatus', '공개한 공구는 지울 수 없어요. 취소해 주세요.')
       write(GIGS, gigs().filter((g) => g.id !== id))
+    },
+    async publish(id, { hostAlias }) {
+      run(gigs().find((g) => g.id === id), { type: 'publish', hostAlias })
+      return id
     },
     async execute(id, command) {
       run(gigs().find((g) => g.id === id), command)

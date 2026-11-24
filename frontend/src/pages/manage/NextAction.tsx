@@ -23,6 +23,10 @@ export function NextAction({ gig, onOpen }: Props) {
   let detail: ReactNode = null
   let buttons: ReactNode = null
 
+  const server = gig.server
+  const waitingSettlement = server?.pending ?? null
+  const vacancy = server ? seatsLeft(gig) : 0
+
   switch (gig.status) {
     case 'recruiting': {
       const full = seatsLeft(gig) === 0
@@ -46,11 +50,13 @@ export function NextAction({ gig, onOpen }: Props) {
     }
     case 'closed':
       title = '주문하고 실제 금액을 입력하세요'
-      detail = `방장 포함 ${approved(gig).length + 1}명이 함께해요. 확정하기 전에는 다시 모집할 수 있어요.`
+      detail = vacancy
+        ? `빈자리가 ${vacancy}개 있어요. ‘조건 바꾸기’에서 인원을 ${approved(gig).length + 1}명으로 맞추거나 다시 모집해 주세요.`
+        : `방장 포함 ${approved(gig).length + 1}명이 함께해요. 확정하기 전에는 다시 모집할 수 있어요.`
       buttons = (
         <>
-          <Button variant="ink" onClick={() => onOpen('order')}>
-            주문 금액 확정하기
+          <Button variant="ink" disabled={vacancy > 0} onClick={() => onOpen('order')}>
+            주문 금액 {server ? '입력하기' : '확정하기'}
           </Button>
           <Button variant="outline" disabled={pending} onClick={() => send({ type: 'reopen' })}>
             다시 모집하기
@@ -61,7 +67,43 @@ export function NextAction({ gig, onOpen }: Props) {
         </>
       )
       break
-    case 'settling':
+    case 'settling': {
+      if (server && waitingSettlement) {
+        const people = waitingSettlement.needsConfirm.length
+        title = people ? '참여자 확인을 받고 정산을 확정하세요' : '정산을 확정하세요'
+        detail = people
+          ? `모집 때와 달라져 참여자 ${people}명이 모두 초대 링크에서 확인해야 확정할 수 있어요.`
+          : '모집 때와 같은 금액이라 바로 확정할 수 있어요.'
+        buttons = (
+          <>
+            <Button variant="ink" disabled={pending} onClick={() => send({ type: 'confirmPending', version: waitingSettlement.version })}>
+              정산 확정하기
+            </Button>
+            <Button variant="outline" onClick={() => onOpen(gig.settlements.length ? 'revise' : 'order')}>
+              다시 입력하기
+            </Button>
+          </>
+        )
+        break
+      }
+      if (server) {
+        const ready = Boolean(gig.pickup?.place && gig.pickup.at)
+        title = ready ? '입금을 확인하고 수령을 시작하세요' : '수령 일시와 장소를 정하세요'
+        detail = ready
+          ? '수령을 먼저 시작하고 입금은 나중에 확인해도 돼요.'
+          : '‘정산 바꾸기’에서 수령 일시와 장소를 넣으면 참여자 확인을 거쳐 확정돼요.'
+        buttons = (
+          <>
+            <Button variant="ink" disabled={pending || !ready} onClick={() => send({ type: 'startPickup', place: '', at: null })}>
+              수령 시작하기
+            </Button>
+            <Button variant="outline" onClick={() => onOpen('revise')}>
+              정산 바꾸기
+            </Button>
+          </>
+        )
+        break
+      }
       title = pendingNames ? '바뀐 금액의 확인을 기다려요' : '입금을 확인하고 수령을 안내하세요'
       detail = pendingNames ? `아직 확인하지 않은 참여자: ${pendingNames}` : '수령 안내를 먼저 하고 입금은 나중에 확인해도 돼요.'
       buttons = (
@@ -75,6 +117,7 @@ export function NextAction({ gig, onOpen }: Props) {
         </>
       )
       break
+    }
     case 'pickup':
       title = blockers.length ? '수령과 입금을 정리하세요' : '모두 정리됐어요. 완료할 수 있어요'
       detail = blockers.length ? (
@@ -89,9 +132,11 @@ export function NextAction({ gig, onOpen }: Props) {
           <Button variant="ink" disabled={pending || blockers.length > 0} onClick={() => send({ type: 'complete' })}>
             공구 완료하기
           </Button>
-          <Button variant="outline" onClick={() => onOpen('pickup')}>
-            수령 안내 바꾸기
-          </Button>
+          {!server && (
+            <Button variant="outline" onClick={() => onOpen('pickup')}>
+              수령 안내 바꾸기
+            </Button>
+          )}
           <Button variant="outline" onClick={() => onOpen('revise')}>
             정산 바꾸기
           </Button>
@@ -109,7 +154,7 @@ export function NextAction({ gig, onOpen }: Props) {
       break
     case 'cancelled':
       title = hasOpenMoney(gig) ? '받은 금액을 돌려주세요' : '취소한 공구예요'
-      detail = `취소 이유: ${gig.cancelReason}`
+      detail = gig.cancelReason ? `취소 이유: ${gig.cancelReason}` : '초대 링크에 취소됐다고 표시돼요.'
       break
     case 'draft':
       return null

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, TextInput, controlClass } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
+import { SERVER_ISSUES } from '@/data/serverMap'
 import { store, useAction } from '@/data/useStore'
 import { aliasOf, approved } from '@/domain/gig/select'
 import { ISSUE_LABEL, type Gig, type Issue, type IssueKind } from '@/domain/gig/types'
@@ -12,7 +13,11 @@ import { ISSUE_LABEL, type Gig, type Issue, type IssueKind } from '@/domain/gig/
 export function IssuesSection({ gig }: { gig: Gig }) {
   const [adding, setAdding] = useState(false)
   const [resolving, setResolving] = useState<Issue | null>(null)
-  const canAdd = ['closed', 'settling', 'pickup', 'done'].includes(gig.status)
+  const { run, pending, error } = useAction()
+  const resolveNow = (issueId: string) => void run(() => store.execute(gig.id, { type: 'resolveIssue', issueId, followUp: '' }))
+  const canAdd = store.local
+    ? ['closed', 'settling', 'pickup', 'done'].includes(gig.status)
+    : gig.settlements.length > 0 && !gig.server?.pending && ['settling', 'pickup', 'done', 'cancelled'].includes(gig.status)
   if (!canAdd && gig.issues.length === 0) return null
   return (
     <section aria-labelledby="issues-title" className="rounded-panel bg-surface p-5">
@@ -38,11 +43,11 @@ export function IssuesSection({ gig }: { gig: Gig }) {
                 {i.key && ` (${aliasOf(gig, i.key)})`}
                 <span className="font-normal text-ink-soft">{i.resolvedAt ? '해결' : '처리 중'}</span>
               </p>
-              <p className="mt-1 text-sm">{i.reason}</p>
+              {i.reason && <p className="mt-1 text-sm">{i.reason}</p>}
               {i.resolvedAt ? (
-                <p className="mt-1 text-sm text-ink-soft">처리: {i.followUp}</p>
+                i.followUp && <p className="mt-1 text-sm text-ink-soft">처리: {i.followUp}</p>
               ) : (
-                <Button variant="outline" className="mt-2 min-h-11 px-4 text-sm" onClick={() => setResolving(i)}>
+                <Button variant="outline" className="mt-2 min-h-11 px-4 text-sm" disabled={pending} onClick={() => (store.local ? setResolving(i) : resolveNow(i.id))}>
                   해결로 표시
                 </Button>
               )}
@@ -50,17 +55,25 @@ export function IssuesSection({ gig }: { gig: Gig }) {
           ))}
         </ul>
       )}
+      {error && (
+        <Notice tone="error" className="mt-3">
+          {error}
+        </Notice>
+      )}
       {adding && <AddDialog gig={gig} onClose={() => setAdding(false)} />}
       {resolving && <ResolveDialog gig={gig} issue={resolving} onClose={() => setResolving(null)} />}
     </section>
   )
 }
 
+const LOCAL_KINDS: IssueKind[] = ['soldOut', 'orderCancelled', 'partialRefund', 'noShow', 'other']
+
 function AddDialog({ gig, onClose }: { gig: Gig; onClose: () => void }) {
-  const [kind, setKind] = useState<IssueKind>('soldOut')
+  const [kind, setKind] = useState<IssueKind>(store.local ? 'soldOut' : 'orderIssue')
   const [key, setKey] = useState('')
   const [reason, setReason] = useState('')
   const { run, pending, error } = useAction()
+  const needsPerson = !store.local && (kind === 'noShow' || kind === 'returnRequired')
   return (
     <Dialog title="문제 기록하기" onClose={onClose}>
       <form
@@ -73,9 +86,9 @@ function AddDialog({ gig, onClose }: { gig: Gig; onClose: () => void }) {
         <Field label="무슨 일인가요?">
           {(a) => (
             <select {...a} className={`${controlClass} select-chevron`} value={kind} onChange={(e) => setKind(e.target.value as IssueKind)}>
-              {Object.entries(ISSUE_LABEL).map(([k, label]) => (
+              {(store.local ? LOCAL_KINDS : SERVER_ISSUES.map((i) => i.kind)).map((k) => (
                 <option key={k} value={k}>
-                  {label}
+                  {ISSUE_LABEL[k]}
                 </option>
               ))}
             </select>
@@ -84,7 +97,8 @@ function AddDialog({ gig, onClose }: { gig: Gig; onClose: () => void }) {
         <Field label="관련된 참여자">
           {(a) => (
             <select {...a} className={`${controlClass} select-chevron`} value={key} onChange={(e) => setKey(e.target.value)}>
-              <option value="">공구 전체</option>
+              {!needsPerson && <option value="">공구 전체</option>}
+              {needsPerson && <option value="">고르세요</option>}
               {approved(gig).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.alias}
@@ -93,12 +107,14 @@ function AddDialog({ gig, onClose }: { gig: Gig; onClose: () => void }) {
             </select>
           )}
         </Field>
-        <Field label="이유">
-          {(a) => <TextInput {...a} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} />}
-        </Field>
+        {store.local && (
+          <Field label="이유">
+            {(a) => <TextInput {...a} value={reason} maxLength={200} onChange={(e) => setReason(e.target.value)} />}
+          </Field>
+        )}
         <p className="text-sm text-ink-soft">금액이나 인원이 바뀌면 ‘정산 바꾸기’도 함께 해 주세요.</p>
         {error && <Notice tone="error">{error}</Notice>}
-        <Button type="submit" className="w-full" disabled={pending || !reason.trim()}>
+        <Button type="submit" className="w-full" disabled={pending || (store.local ? !reason.trim() : needsPerson && !key)}>
           기록하기
         </Button>
       </form>

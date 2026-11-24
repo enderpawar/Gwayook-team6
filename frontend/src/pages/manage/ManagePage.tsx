@@ -1,11 +1,13 @@
 import { useState } from 'react'
+import { LoginPrompt } from '@/components/LoginPrompt'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Seats } from '@/components/SeatBoard'
 import { SettlementTicket } from '@/components/SettlementTicket'
 import { ShareRow } from '@/components/ShareRow'
 import { Sticker } from '@/components/Sticker'
+import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
-import { store, usePeople, useQuery } from '@/data/useStore'
+import { store, useAction, usePeople, useQuery } from '@/data/useStore'
 import { approved, estimate, hasOpenMoney, latest } from '@/domain/gig/select'
 import { settlementShareText, statusShareText } from '@/domain/gig/shareText'
 import type { Gig } from '@/domain/gig/types'
@@ -30,7 +32,16 @@ const FLOW_LABEL = { recruiting: '모집', closed: '마감', settling: '정산',
 export function ManagePage({ id }: { id: string }) {
   const { me } = usePeople()
   const query = useQuery(() => store.getHosted(id), `gig:${id}:${me.id}`)
-  if (query.status === 'error') return <PageError title="공구를 열 수 없어요" message={query.message} />
+  if (query.status === 'error') {
+    if (query.code === 'auth') {
+      return (
+        <div className="py-8">
+          <LoginPrompt text="로그인하면 이 공구를 관리할 수 있어요." next={href.manage(id)} />
+        </div>
+      )
+    }
+    return <PageError title="공구를 열 수 없어요" message={query.message} />
+  }
   if (query.status === 'loading') return <PageLoading />
   if (query.data.status === 'draft') {
     return <PageError title="아직 초안이에요" message="초안을 이어서 쓴 뒤 공구를 열어 주세요." />
@@ -41,7 +52,7 @@ export function ManagePage({ id }: { id: string }) {
 function Manage({ gig }: { gig: Gig }) {
   const [dialog, setDialog] = useState<ManageDialog | null>(null)
   const close = () => setDialog(null)
-  const link = absolute(href.join(gig.inviteCode))
+  const link = gig.inviteCode ? absolute(href.join(gig.inviteCode)) : null
   const v = latest(gig)
   const settled = settlementShareText(gig)
   const active = gig.status !== 'cancelled'
@@ -90,8 +101,15 @@ function Manage({ gig }: { gig: Gig }) {
             <h2 className="text-lg font-bold">공유하기</h2>
             <div>
               <p className="mb-2 text-sm font-semibold">초대 링크와 현재 상태</p>
-              <p className="mb-2 rounded-control bg-paper px-3.5 py-2.5 text-sm break-all">{link}</p>
-              <ShareRow text={statusShareText(gig, link)} copyLabel="안내 복사" shareLabel="안내 공유" />
+              {link ? (
+                <>
+                  <p className="mb-2 rounded-control bg-paper px-3.5 py-2.5 text-sm break-all">{link}</p>
+                  <ShareRow text={statusShareText(gig, link)} copyLabel="안내 복사" shareLabel="안내 공유" />
+                </>
+              ) : (
+                <p className="text-sm text-ink-soft">이 브라우저에는 초대 링크가 없어요.</p>
+              )}
+              {gig.server && (gig.status === 'recruiting' || gig.status === 'closed') && <NewInvite gig={gig} hasLink={Boolean(link)} />}
             </div>
             {settled && (
               <div>
@@ -101,7 +119,8 @@ function Manage({ gig }: { gig: Gig }) {
                 <p className="mt-2 text-sm text-ink-soft">계좌와 상세 주소는 승인한 참여자에게 따로 보내 주세요.</p>
               </div>
             )}
-            {store.local && <Notice>지금은 이 브라우저에서만 링크가 열려요. 서버를 연결하면 다른 기기에서도 열려요.</Notice>}
+            {store.local && <Notice>지금은 이 브라우저에서만 링크가 열려요. 다른 기기로 보내도 열리지 않아요.</Notice>}
+            {!store.local && <Notice>서버가 같은 컴퓨터의 접속만 받아서, 링크는 이 컴퓨터에서만 열려요.</Notice>}
           </section>
           <HistorySection gig={gig} />
         </div>
@@ -112,6 +131,31 @@ function Manage({ gig }: { gig: Gig }) {
       {dialog === 'revise' && <OrderDialog gig={gig} mode="revise" onClose={close} />}
       {dialog === 'pickup' && <PickupDialog gig={gig} onClose={close} />}
       {dialog === 'cancel' && <CancelDialog gig={gig} onClose={close} />}
+    </div>
+  )
+}
+
+function NewInvite({ gig, hasLink }: { gig: Gig; hasLink: boolean }) {
+  const { run, pending, error } = useAction()
+  return (
+    <div className="mt-2">
+      <Button
+        variant="outline"
+        className="min-h-11 px-4 text-sm"
+        disabled={pending}
+        onClick={() => {
+          if (!hasLink || window.confirm('새 링크를 만들면 지금 링크는 더 이상 열리지 않아요. 만들까요?')) {
+            void run(() => store.execute(gig.id, { type: 'rotateInvite' }))
+          }
+        }}
+      >
+        새 초대 링크 만들기
+      </Button>
+      {error && (
+        <Notice tone="error" className="mt-2">
+          {error}
+        </Notice>
+      )}
     </div>
   )
 }
@@ -131,13 +175,14 @@ function Progress({ gig }: { gig: Gig }) {
 }
 
 function Ticket({ gig }: { gig: Gig }) {
-  const v = latest(gig)
+  const waiting = gig.server?.pending
+  const v = waiting ?? latest(gig)
   if (v) {
-    const prev = gig.settlements.at(-2)
+    const prev = waiting ? gig.settlements.at(-1) : gig.settlements.at(-2)
     return (
       <SettlementTicket
         title={displayName(gig.product)}
-        caption={v.version === 1 ? '정산 1차, 확정 금액' : `정산 ${v.version}차, ${v.reason}`}
+        caption={waiting ? `정산 ${v.version}차, 확정 전` : v.version === 1 ? '정산 1차, 확정 금액' : `정산 ${v.version}차, ${v.reason}`}
         total={v.total}
         totalUnits={formatUnits(gig.product, v.order.totalUnits)}
         rows={v.shares.map((s) => ({

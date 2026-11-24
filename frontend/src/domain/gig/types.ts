@@ -11,6 +11,8 @@ export interface Participant {
   status: ParticipantStatus
   appliedAt: string
   approvedAt: string | null
+  /** 서버가 정한 승인 순서. 로컬 저장소에는 없다. */
+  order?: number
 }
 
 export interface OrderInput {
@@ -57,7 +59,27 @@ export interface PaymentEvent {
   at: string
 }
 
-export type IssueKind = 'soldOut' | 'orderCancelled' | 'partialRefund' | 'noShow' | 'other'
+export type IssueKind = 'soldOut' | 'orderCancelled' | 'partialRefund' | 'noShow' | 'other' | 'orderIssue' | 'returnRequired' | 'correction'
+
+export interface Balance {
+  due: number
+  received: number
+  refunded: number
+  reported: number
+  /** 양수면 더 받아야 하고, 음수면 돌려줘야 한다. */
+  remaining: number
+}
+
+/** 서버에서 읽은 공구에만 있는 값 */
+export interface ServerInfo {
+  revision: number
+  inviteToken: string | null
+  /** 참여자 재확인과 방장 확정을 기다리는 정산 */
+  pending: SettlementVersion | null
+  balances: Record<ShareKey, Balance>
+  /** 기록한 판매처 환불이 아직 정산에 반영되지 않았는지 */
+  refundUnapplied: boolean
+}
 
 export interface Issue {
   id: string
@@ -97,6 +119,7 @@ export interface Gig {
   conditionsEditedAt: string | null
   createdAt: string
   updatedAt: string
+  server?: ServerInfo
 }
 
 export interface GigConditions {
@@ -108,6 +131,11 @@ export interface GigConditions {
   displayedPrice?: number
 }
 
+export interface PickupPlan {
+  place: string
+  at: string | null
+}
+
 export type Command =
   | { type: 'publish'; hostAlias: string }
   | { type: 'apply'; alias: string }
@@ -117,8 +145,11 @@ export type Command =
   | { type: 'editConditions'; conditions: GigConditions }
   | { type: 'close' }
   | { type: 'reopen' }
-  | { type: 'confirmOrder'; order: OrderInput }
-  | { type: 'revise'; order: OrderInput; removeParticipantIds: string[]; reason: string }
+  | { type: 'confirmOrder'; order: OrderInput; pickup?: PickupPlan }
+  | { type: 'revise'; order: OrderInput; removeParticipantIds: string[]; reason: string; pickup?: PickupPlan }
+  | { type: 'confirmPending'; version: number }
+  | { type: 'merchantRefund'; commandId: string; amount: number }
+  | { type: 'rotateInvite' }
   | { type: 'confirmShare'; version: number }
   | { type: 'reportPayment'; commandId: string; amount: number }
   | { type: 'confirmPayment'; commandId: string; participantId: string; amount: number }
@@ -146,6 +177,9 @@ export const ISSUE_LABEL: Record<IssueKind, string> = {
   partialRefund: '부분 환불',
   noShow: '노쇼',
   other: '기타',
+  orderIssue: '주문 문제',
+  returnRequired: '반납 필요',
+  correction: '정정',
 }
 
 export class GigError extends Error {

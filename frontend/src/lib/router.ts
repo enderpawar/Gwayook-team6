@@ -6,6 +6,7 @@ export type Route =
   | { name: 'manage'; id: string }
   | { name: 'join'; code: string; version: number | null }
   | { name: 'savings' }
+  | { name: 'login'; next: string | null }
   | { name: 'notFound' }
 
 export function parseHash(hash: string): Route {
@@ -14,12 +15,24 @@ export function parseHash(hash: string): Route {
   if (!head) return { name: 'plan', draftId: null }
   if (head === 'draft' && id) return { name: 'plan', draftId: id }
   if (head === 'gigs') return id ? { name: 'manage', id } : { name: 'gigs' }
+  if (head === 'login') return { name: 'login', next: safeNext(id) }
   if (head === 'savings') return { name: 'savings' }
   if (head === 'join' && id) {
     const version = sub === 'v' && /^\d+$/.test(v ?? '') ? Number(v) : null
     return { name: 'join', code: id, version }
   }
   return { name: 'notFound' }
+}
+
+/** 로그인 뒤에 돌아갈 주소. 앱 안의 해시 주소만 허용한다. */
+function safeNext(value: string | undefined): string | null {
+  if (!value) return null
+  try {
+    const next = decodeURIComponent(value)
+    return next.startsWith('#/') && !next.startsWith('#/login') ? next : null
+  } catch {
+    return null
+  }
 }
 
 export const href = {
@@ -30,6 +43,7 @@ export const href = {
   join: (code: string) => `#/join/${code}`,
   joinVersion: (code: string, version: number) => `#/join/${code}/v/${version}`,
   savings: '#/savings',
+  login: (next?: string) => (next && next.startsWith('#/') ? `#/login/${encodeURIComponent(next)}` : '#/login'),
 }
 
 export const absolute = (hash: string) => `${location.origin}${location.pathname}${hash}`

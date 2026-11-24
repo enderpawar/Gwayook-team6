@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { DateField } from '@/components/ui/DateField'
 import { Dialog } from '@/components/ui/Dialog'
-import { Field, TextInput } from '@/components/ui/Field'
+import { Field, TextInput, controlClass } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
+import { CANCEL_REASONS } from '@/data/serverMap'
 import { store, useAction } from '@/data/useStore'
 import { balance, moneyKeys } from '@/domain/gig/select'
 import type { Gig } from '@/domain/gig/types'
@@ -42,7 +44,7 @@ export function PickupDialog({ gig, onClose }: Props) {
           </div>
         )}
         <Field label="수령 일시" hint="비우면 미정으로 안내해요.">
-          {(a) => <TextInput {...a} type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} />}
+          {(a) => <DateField {...a} label="수령 일시" mode="datetime" value={at} onChange={setAt} />}
         </Field>
         {error && <Notice tone="error">{error}</Notice>}
         <Button type="submit" className="w-full" disabled={pending || !place.trim()}>
@@ -71,8 +73,21 @@ export function CancelDialog({ gig, onClose }: Props) {
       >
         <p>취소하면 되돌릴 수 없고, 초대 링크에 취소됐다고 표시돼요.</p>
         {refundable > 0 && <Notice tone="warn">이미 받은 {won(refundable)}은 돌려줄 금액으로 남아요. 환불을 끝까지 기록해 주세요.</Notice>}
-        <Field label="취소 이유" hint="참여자에게 보여요.">
-          {(a) => <TextInput {...a} value={reason} maxLength={100} onChange={(e) => setReason(e.target.value)} />}
+        <Field label="취소 이유" hint={store.local ? '참여자에게 보여요.' : undefined}>
+          {(a) =>
+            store.local ? (
+              <TextInput {...a} value={reason} maxLength={100} onChange={(e) => setReason(e.target.value)} />
+            ) : (
+              <select {...a} className={`${controlClass} select-chevron`} value={reason} onChange={(e) => setReason(e.target.value)}>
+                <option value="">고르세요</option>
+                {CANCEL_REASONS.map((r) => (
+                  <option key={r.code} value={r.code}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            )
+          }
         </Field>
         {error && <Notice tone="error">{error}</Notice>}
         <div className="flex gap-2">

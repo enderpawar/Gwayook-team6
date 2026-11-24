@@ -1,3 +1,4 @@
+import { DateField } from '@/components/ui/DateField'
 import { Field, NumberInput, TextInput } from '@/components/ui/Field'
 import { Notice } from '@/components/ui/Notice'
 import type { Flow } from './flow'
@@ -93,7 +94,7 @@ export function ReferenceForm({ flow }: { flow: Flow }) {
         </Field>
         <div className="grid grid-cols-2 items-start gap-3">
           <Field label="가격 확인일">
-            {(a) => <TextInput {...a} type="date" max={today()} value={r.checkedOn} onChange={(e) => actions.reference({ checkedOn: e.target.value })} />}
+            {(a) => <DateField {...a} label="가격 확인일" mode="date" max={today()} value={r.checkedOn} onChange={(checkedOn) => actions.reference({ checkedOn })} />}
           </Field>
           <Field label="1년 구매 횟수" hint="넣으면 연간 예상액을 보여줘요.">
             {(a) => <NumberInput {...a} suffix="회" value={r.purchasesPerYear} onValue={(v) => actions.reference({ purchasesPerYear: v })} />}
