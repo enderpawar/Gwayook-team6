@@ -1,5 +1,6 @@
 import { CircleCheck, Crown } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
+import { LoginPrompt } from '@/components/LoginPrompt'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Sticker } from '@/components/Sticker'
 import { Button } from '@/components/ui/Button'
@@ -61,9 +62,11 @@ function Join({ view: v, version }: { view: InviteView; version: number | null }
           <StatusBadge status={v.status} label={v.status === 'recruiting' && !v.applyOpen ? '신청 마감' : undefined} />
           <h1 className="mt-3 pr-20 font-display text-3xl sm:text-4xl">{v.productName}</h1>
           {v.option && <p className="mt-1">{v.option}</p>}
-          <p className="mt-1 flex items-center gap-1.5">
-            <Crown aria-hidden className="size-4.5" /> 방장 {v.hostAlias}
-          </p>
+          {v.hostAlias && (
+            <p className="mt-1 flex items-center gap-1.5">
+              <Crown aria-hidden className="size-4.5" /> 방장 {v.hostAlias}
+            </p>
+          )}
         </div>
         <div className="ticket rounded-t-none" style={{ '--notch': '0px', borderTopLeftRadius: 0, borderTopRightRadius: 0 } as CSSProperties}>
           <div className="mx-5 border-t-2 border-dashed border-line" />
@@ -84,7 +87,7 @@ function Join({ view: v, version }: { view: InviteView; version: number | null }
             <Item term="남은 자리">{v.status === 'recruiting' ? `${v.seatsLeft}자리 (모두 ${v.headcount}명)` : '모집 끝'}</Item>
             <Item term="신청 마감">{formatDeadline(v.deadline) ?? '미정'}</Item>
             <Item term="수령 장소">{v.place ?? '미정'}</Item>
-            <Item term="소용량보다">{v.savingsRate === null ? '비교 정보 없음' : v.savingsRate >= 0 ? `${percent(v.savingsRate)} 저렴` : `${percent(v.savingsRate)} 비쌈`}</Item>
+            {store.local && <Item term="소용량보다">{v.savingsRate === null ? '비교 정보 없음' : v.savingsRate >= 0 ? `${percent(v.savingsRate)} 저렴` : `${percent(v.savingsRate)} 비쌈`}</Item>}
             {v.pickupCandidates.length > 0 && (
               <Item term="수령 후보" wide>
                 {v.pickupCandidates.map((c) => formatDeadline(c)).join(', ')}
@@ -100,7 +103,7 @@ function Join({ view: v, version }: { view: InviteView; version: number | null }
       </article>
 
       <div className="mt-5 space-y-5">
-        {v.status === 'cancelled' && <Notice tone="error">취소된 공구예요. 이유: {v.cancelReason}</Notice>}
+        {v.status === 'cancelled' && <Notice tone="error">취소된 공구예요.{v.cancelReason && ` 이유: ${v.cancelReason}`}</Notice>}
         {v.isHost ? (
           <a href={href.manage(v.hostGigId!)} className="inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 font-semibold text-white">
             방장 화면으로 가기
@@ -127,6 +130,10 @@ function Mine({ view: v }: { view: InviteView }) {
   const { run, pending, error } = useAction()
   const send = (c: Command) => run(() => store.executeByCode(v.code, c))
   const active = me?.status === 'applied' || me?.status === 'approved'
+  const { user } = usePeople()
+  const guest = !store.local && !user
+  // 서버는 한 번 신청한 사람의 재신청을 받지 않는다.
+  const canApply = v.applyOpen && (store.local || !me)
 
   return (
     <>
@@ -144,7 +151,7 @@ function Mine({ view: v }: { view: InviteView }) {
               className="mt-4"
               disabled={pending}
               onClick={() => {
-                if (window.confirm('신청을 철회할까요?')) void send({ type: 'withdraw' })
+                if (window.confirm(store.local ? '신청을 철회할까요?' : '신청을 철회할까요? 철회하면 다시 신청할 수 없어요.')) void send({ type: 'withdraw' })
               }}
             >
               신청 철회
@@ -153,14 +160,20 @@ function Mine({ view: v }: { view: InviteView }) {
         </section>
       )}
       {!active && !me?.share && me?.status === 'excluded' && <Notice>방장이 이 공구의 참여를 제외했어요.</Notice>}
-      {!active && me?.status !== 'excluded' && (v.applyOpen ? <ApplyForm view={v} send={send} pending={pending} /> : <Closed view={v} />)}
+      {!active && me?.status !== 'excluded' && me?.status !== 'withdrawn' && guest && v.applyOpen && (
+        <LoginPrompt text="로그인하면 참여를 신청할 수 있어요." next={href.join(v.code)} />
+      )}
+      {!active && me?.status === 'withdrawn' && !canApply && <Notice>신청을 철회했어요.</Notice>}
+      {!active && me?.status !== 'excluded' && !guest && canApply && <ApplyForm view={v} send={send} pending={pending} />}
+      {!active && me?.status !== 'excluded' && me?.status !== 'withdrawn' && !v.applyOpen && <Closed view={v} full={v.status === 'recruiting' && v.seatsLeft === 0} />}
       {me?.balance && !me.share && <BalanceLine me={me} />}
     </>
   )
 }
 
-function Closed({ view: v }: { view: InviteView }) {
+function Closed({ view: v, full }: { view: InviteView; full: boolean }) {
   if (v.status === 'cancelled') return null
+  if (full) return <Notice>자리가 모두 찼어요.</Notice>
   return <Notice>{CLOSED[v.status] ?? '신청 마감이 지났어요.'}</Notice>
 }
 
@@ -205,7 +218,9 @@ function MyShare({ view: v, me, send, pending }: { view: InviteView; me: MyView 
     <section aria-label="내 몫" className="rounded-panel bg-surface p-5">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-lg font-bold">{me.alias}의 몫</h2>
-        <p className="text-sm text-ink-soft">정산 {s.version}차</p>
+        <p className="text-sm text-ink-soft">
+          정산 {s.version}차{s.waiting && ', 확정 전'}
+        </p>
       </div>
       <p className="mt-2 font-display text-4xl tabular-nums">{won(s.amount)}</p>
       <p className="mt-1 font-semibold">
@@ -229,7 +244,9 @@ function MyShare({ view: v, me, send, pending }: { view: InviteView; me: MyView 
         <BalanceLine me={me} />
       )}
 
-      {!s.needsConfirm && me.balance && me.balance.remaining > 0 && v.status !== 'cancelled' && (
+      {s.waiting && !s.needsConfirm && <Notice className="mt-4">확인했어요. 방장이 정산을 확정하면 입금할 금액이 정해져요.</Notice>}
+
+      {!s.needsConfirm && !s.waiting && me.balance && me.balance.remaining > 0 && v.status !== 'cancelled' && (
         <ReportForm remaining={me.balance.remaining} send={send} pending={pending} />
       )}
 

@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { CopyPanel } from '@/components/CopyPanel'
 import { DateField } from '@/components/ui/DateField'
 import { Field, TextInput } from '@/components/ui/Field'
+import type { PublishInput } from '@/data/store'
 import { cn } from '@/lib/cn'
 import { nowLocal } from '@/lib/format'
 import type { Flow } from './flow'
@@ -10,7 +11,7 @@ import { PublishPanel } from './PublishPanel'
 
 const PLACES = ['행복기숙사 1동 로비', '학교 정문', '도서관 앞', '학생회관 1층']
 
-export function PostStep({ flow, onPublish }: { flow: Flow; onPublish: (alias: string) => Promise<void> }) {
+export function PostStep({ flow, returnTo, onPublish }: { flow: Flow; returnTo: string; onPublish: (input: PublishInput) => Promise<void> }) {
   const { state, actions, post } = flow
   const { plan } = state
   const [custom, setCustom] = useState(plan.place !== null && !PLACES.includes(plan.place))
@@ -96,7 +97,7 @@ export function PostStep({ flow, onPublish }: { flow: Flow; onPublish: (alias: s
         </section>
         <div className="space-y-6">
           {post && <CopyPanel post={post} />}
-          {post && <PublishPanel onPublish={onPublish} />}
+          {post && <PublishPanel product={state.product} plan={plan} returnTo={returnTo} onPublish={onPublish} />}
         </div>
       </div>
     </div>

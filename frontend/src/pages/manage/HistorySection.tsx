@@ -7,6 +7,7 @@ const time = (iso: string) =>
 
 export function HistorySection({ gig }: { gig: Gig }) {
   const old = gig.settlements.slice(0, -1).reverse()
+  if (gig.server && old.length === 0) return null
   return (
     <section aria-labelledby="history-title" className="rounded-panel bg-surface p-5">
       <h2 id="history-title" className="text-lg font-bold">
@@ -32,7 +33,7 @@ export function HistorySection({ gig }: { gig: Gig }) {
           </ul>
         </details>
       ))}
-      <details className="mt-2">
+      {!gig.server && <details className="mt-2">
         <summary className="cursor-pointer py-3 text-sm font-semibold">모든 활동 {gig.log.length}건</summary>
         <ol className="border-l-2 border-line pl-4 text-sm">
           {[...gig.log].reverse().map((l, i) => (
@@ -41,7 +42,7 @@ export function HistorySection({ gig }: { gig: Gig }) {
             </li>
           ))}
         </ol>
-      </details>
+      </details>}
     </section>
   )
 }

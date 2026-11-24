@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowRight, CloudCheck, CloudOff } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Stepper } from '@/components/Stepper'
 import { Button } from '@/components/ui/Button'
+import type { PublishInput } from '@/data/store'
 import { store, useQuery } from '@/data/useStore'
 import { useFlow, type FlowSeed, type Step } from '@/features/flow'
 import { PostStep } from '@/features/PostStep'
@@ -86,13 +87,19 @@ function Planner({ id, seed }: { id: string | null; seed: FlowSeed | null }) {
     root.current?.querySelector('h1')?.focus({ preventScroll: true })
   }, [step])
 
-  const publish = async (hostAlias: string) => {
+  const publish = async (input: PublishInput) => {
     await store.saveDraft({ id: draftId, step, product, reference, plan })
-    await store.execute(draftId, { type: 'publish', hostAlias })
+    // 공개하는 동안 자동 저장이 초안을 되살리지 않게 한다.
     published.current = true
     pending.current = null
-    store.setAlias(hostAlias)
-    navigate(href.manage(draftId))
+    try {
+      const gigId = await store.publish(draftId, input)
+      store.setAlias(input.hostAlias)
+      navigate(href.manage(gigId))
+    } catch (e) {
+      published.current = false
+      throw e
+    }
   }
 
   return (
@@ -114,7 +121,7 @@ function Planner({ id, seed }: { id: string | null; seed: FlowSeed | null }) {
         {step === 0 && <ProductStep flow={flow} />}
         {step === 1 && <ReviewStep flow={flow} />}
         {step === 2 && <SplitStep flow={flow} />}
-        {step === 3 && <PostStep flow={flow} onPublish={publish} />}
+        {step === 3 && <PostStep flow={flow} returnTo={href.draft(draftId)} onPublish={publish} />}
       </div>
       {step > 0 && <BottomBar flow={flow} />}
     </div>

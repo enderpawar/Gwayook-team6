@@ -1,11 +1,13 @@
-import { PackagePlus, PiggyBank, Ticket } from 'lucide-react'
+import { CircleUser, PackagePlus, PiggyBank, Ticket } from 'lucide-react'
 import { MotionConfig } from 'motion/react'
 import { useEffect, useRef } from 'react'
 import { DemoBar } from '@/components/DemoBar'
 import { href, useRoute, type Route } from '@/lib/router'
 import { cn } from '@/lib/cn'
+import { store, usePeople } from '@/data/useStore'
 import { GigListPage } from '@/pages/GigListPage'
 import { JoinPage } from '@/pages/JoinPage'
+import { LoginPage } from '@/pages/LoginPage'
 import { ManagePage } from '@/pages/manage/ManagePage'
 import { PlanPage } from '@/pages/PlanPage'
 import { SavingsPage } from '@/pages/SavingsPage'
@@ -18,6 +20,7 @@ const NAV = [
 
 export function App() {
   const { route, visit } = useRoute()
+  const { user } = usePeople()
   const main = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -33,7 +36,7 @@ export function App() {
           <a href={href.plan} className="rounded-md font-display text-xl">
             긱스플리터
           </a>
-          <nav aria-label="주요 메뉴" className="flex">
+          <nav aria-label="주요 메뉴" className="-ml-3 flex flex-wrap sm:ml-0">
             {NAV.map(({ to, label, icon: Icon, names }) => {
               const on = names.includes(route.name)
               return (
@@ -51,6 +54,16 @@ export function App() {
                 </a>
               )
             })}
+            {!store.local && (
+              <a
+                href={href.login()}
+                aria-current={route.name === 'login' ? 'page' : undefined}
+                className="inline-flex min-h-11 max-w-28 items-center gap-1.5 rounded-full px-3 text-sm font-semibold hover:bg-ink/5"
+              >
+                <CircleUser aria-hidden className="size-4.5 shrink-0" />
+                <span className="truncate">{user ? user.alias : '로그인'}</span>
+              </a>
+            )}
           </nav>
         </header>
         <DemoBar route={route} />
@@ -74,6 +87,8 @@ function Page({ route, visit }: { route: Route; visit: number }) {
       return <JoinPage key={route.code} code={route.code} version={route.version} />
     case 'savings':
       return <SavingsPage />
+    case 'login':
+      return <LoginPage next={route.next} />
     case 'notFound':
       return (
         <div className="py-12">

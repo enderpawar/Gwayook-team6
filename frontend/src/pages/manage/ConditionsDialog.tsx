@@ -34,13 +34,13 @@ export function ConditionsDialog({ gig, onClose }: { gig: Gig; onClose: () => vo
                 place,
                 pickupCandidates: candidates,
                 ...(deadline !== (gig.plan.deadline ?? '') ? { deadline: deadline || null } : {}),
-                ...(price !== null && price !== gig.product.displayedPrice ? { displayedPrice: price } : {}),
+                ...(store.local && price !== null && price !== gig.product.displayedPrice ? { displayedPrice: price } : {}),
               },
             }),
           ).then((ok) => ok && onClose())
         }}
       >
-        <p className="text-sm text-ink-soft">바꾼 시각이 초대 링크에 표시돼요.</p>
+        <p className="text-sm text-ink-soft">{store.local ? '바꾼 시각이 초대 링크에 표시돼요.' : '수령 후보는 신청 마감보다 늦어야 해요.'}</p>
         <div>
           <p aria-hidden className="mb-1.5 text-sm font-semibold">
             목표 인원 (방장 포함)
@@ -53,14 +53,16 @@ export function ConditionsDialog({ gig, onClose }: { gig: Gig; onClose: () => vo
           />
           {min > 2 && <p className="mt-1.5 text-sm text-ink-soft">이미 승인한 참여자가 있어 {min}명부터 고를 수 있어요.</p>}
         </div>
-        <Field label="상품 금액">
-          {(a) => <NumberInput {...a} suffix="원" value={price} onValue={setPrice} />}
-        </Field>
+        {store.local && (
+          <Field label="상품 금액">
+            {(a) => <NumberInput {...a} suffix="원" value={price} onValue={setPrice} />}
+          </Field>
+        )}
         <Field label="수령 장소" hint="비우면 미정으로 표시해요.">
           {(a) => <TextInput {...a} value={place} maxLength={100} onChange={(e) => setPlace(e.target.value)} />}
         </Field>
-        <Field label="신청 마감" hint="비우면 미정으로 표시해요.">
-          {(a) => <DateField {...a} label="신청 마감" mode="datetime" min={nowLocal()} value={deadline} onChange={setDeadline} />}
+        <Field label="신청 마감" hint={store.local ? '비우면 미정으로 표시해요.' : undefined}>
+          {(a) => <DateField {...a} label="신청 마감" mode="datetime" min={nowLocal()} clearable={store.local} value={deadline} onChange={setDeadline} />}
         </Field>
         <div>
           <Field label="수령 후보 일시" hint="고르면 아래에 추가돼요. 5개까지 넣을 수 있어요.">

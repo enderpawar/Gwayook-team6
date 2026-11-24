@@ -1,6 +1,7 @@
 import { ArrowRight, Trash2 } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { Seats } from '@/components/SeatBoard'
+import { LoginPrompt } from '@/components/LoginPrompt'
 import { StatusBadge } from '@/components/StatusBadge'
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
@@ -14,7 +15,8 @@ import { href } from '@/lib/router'
 import { PageError, PageLoading } from './PageState'
 
 export function GigListPage() {
-  const { me } = usePeople()
+  const { me, user } = usePeople()
+  const guest = !store.local && !user
   const hosted = useQuery(() => store.listHosted(), `hosted:${me.id}`)
   const joined = useQuery(() => store.listJoined(), `joined:${me.id}`)
   if (hosted.status === 'error') return <PageError title="목록을 열 수 없어요" message={hosted.message} />
@@ -27,7 +29,12 @@ export function GigListPage() {
   return (
     <div className="py-5">
       <h1 className="font-display text-3xl sm:text-4xl">내 공구</h1>
-      {empty && (
+      {guest && (
+        <div className="mt-6">
+          <LoginPrompt text="로그인하면 내가 연 공구와 참여한 공구를 볼 수 있어요." next={href.gigs} />
+        </div>
+      )}
+      {empty && !guest && (
         <div className="mt-6 rounded-panel bg-tag p-6">
           <p className="text-lg font-bold">아직 공구가 없어요.</p>
           <p className="mt-1">나눌 상품을 고르면 초안이 자동으로 저장돼요.</p>
@@ -44,7 +51,7 @@ export function GigListPage() {
         </Group>
       )}
       {mine.length > 0 && (
-        <Group title="참여한 공구">
+        <Group title={store.local ? '참여한 공구' : '이 브라우저에서 참여한 공구'}>
           {mine.map((v) => (
             <JoinedTicket key={v.code} view={v} />
           ))}
@@ -74,6 +81,7 @@ const STUB = { '--notch': 'calc(100% - 3.75rem)' } as CSSProperties
 
 function hostHint(g: Gig): string {
   const waiting = applicants(g).length
+  if (g.server?.pending) return '정산을 확정하세요'
   switch (g.status) {
     case 'recruiting':
       return waiting ? `신청 ${waiting}건을 확인하세요` : '신청을 기다리는 중'
@@ -125,7 +133,7 @@ function JoinedTicket({ view: v }: { view: InviteView }) {
           <h3 className="min-w-0 text-lg font-bold">{v.productName}</h3>
           <StatusBadge status={v.status} />
         </div>
-        <p className="mt-1 text-sm text-ink-soft">방장 {v.hostAlias}</p>
+        {v.hostAlias && <p className="mt-1 text-sm text-ink-soft">방장 {v.hostAlias}</p>}
         {v.me?.share && (
           <p className="mt-3 font-display text-2xl tabular-nums">
             {v.me.share.units} {won(v.me.share.amount)}

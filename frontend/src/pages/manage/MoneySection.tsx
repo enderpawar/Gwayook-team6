@@ -12,7 +12,7 @@ import { newId } from '@/lib/id'
 
 interface Target {
   key: string
-  kind: 'confirmPayment' | 'refund'
+  kind: 'confirmPayment' | 'refund' | 'merchantRefund'
 }
 
 export function MoneySection({ gig }: { gig: Gig }) {
@@ -34,6 +34,32 @@ export function MoneySection({ gig }: { gig: Gig }) {
         </Notice>
       )}
       <ul className="mt-2 divide-y divide-line">
+        {gig.server && inTicket.has('host') && (
+          <li className="py-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold">{gig.hostAlias} (방장)</span>
+              <span className="flex flex-wrap gap-2">
+                {gig.status === 'pickup' && (
+                  <Button
+                    variant="outline"
+                    className="min-h-11 px-4 text-sm"
+                    aria-pressed={Boolean(gig.pickedUp.host)}
+                    aria-label={`${gig.hostAlias} 수령 확인`}
+                    disabled={pending}
+                    onClick={() => send({ type: 'setPickedUp', participantId: 'host', done: !gig.pickedUp.host })}
+                  >
+                    <PackageCheck aria-hidden className="size-4" />
+                    {gig.pickedUp.host ? '수령함' : '수령 확인'}
+                  </Button>
+                )}
+                <Button variant="outline" className="min-h-11 px-4 text-sm" onClick={() => setTarget({ key: 'host', kind: 'merchantRefund' })}>
+                  판매처 환불 기록
+                </Button>
+              </span>
+            </div>
+            {gig.server.refundUnapplied && <p className="mt-2 text-sm">기록한 판매처 환불이 아직 정산에 반영되지 않았어요. ‘정산 바꾸기’로 새 정산을 만들어 주세요.</p>}
+          </li>
+        )}
         {moneyKeys(gig).map((key) => {
           const b = balance(gig, key)
           const name = aliasOf(gig, key)
@@ -75,7 +101,7 @@ export function MoneySection({ gig }: { gig: Gig }) {
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {b.remaining > 0 && (
-                  <Button className="min-h-11 px-4 text-sm" disabled={needsConfirm} aria-label={`${name} 입금 확인`} onClick={() => setTarget({ key, kind: 'confirmPayment' })}>
+                  <Button className="min-h-11 px-4 text-sm" disabled={needsConfirm || Boolean(gig.server && (gig.server.pending || gig.status === 'done'))} aria-label={`${name} 입금 확인`} onClick={() => setTarget({ key, kind: 'confirmPayment' })}>
                     입금 확인
                   </Button>
                 )}
@@ -109,26 +135,36 @@ export function MoneySection({ gig }: { gig: Gig }) {
 
 function AmountDialog({ gig, target, onClose }: { gig: Gig; target: Target; onClose: () => void }) {
   const name = aliasOf(gig, target.key)
-  const suggested = Math.abs(balance(gig, target.key).remaining)
-  const [amount, setAmount] = useState<number | null>(suggested)
+  const merchant = target.kind === 'merchantRefund'
+  const suggested = merchant ? 0 : Math.abs(balance(gig, target.key).remaining)
+  const [amount, setAmount] = useState<number | null>(suggested || null)
   // 창을 한 번 열 때마다 id 하나. 두 번 눌러도 같은 기록으로 처리된다.
   const [commandId] = useState(newId)
   const { run, pending, error } = useAction()
   const paying = target.kind === 'confirmPayment'
   return (
-    <Dialog title={paying ? `${name} 입금 확인` : `${name} 환불 기록`} onClose={onClose}>
+    <Dialog title={merchant ? '판매처 환불 기록' : paying ? `${name} 입금 확인` : `${name} 환불 기록`} onClose={onClose}>
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          void run(() => store.execute(gig.id, { type: target.kind, commandId, participantId: target.key, amount: amount ?? 0 })).then(
+          void run(() => store.execute(
+              gig.id,
+              target.kind === 'merchantRefund'
+                ? { type: 'merchantRefund', commandId, amount: amount ?? 0 }
+                : { type: target.kind, commandId, participantId: target.key, amount: amount ?? 0 },
+            )).then(
             (ok) => ok && onClose(),
           )
         }}
       >
         <p className="mb-4 text-sm text-ink-soft">
-          {paying ? '내 계좌에서 실제로 들어온 금액을 확인한 뒤 적어 주세요.' : '실제로 돌려준 금액을 적어 주세요.'}
+          {merchant
+            ? '쇼핑몰에서 실제로 환불받은 금액을 적어 주세요. 기록한 뒤 정산을 새로 만들어야 반영돼요.'
+            : paying
+              ? '내 계좌에서 실제로 들어온 금액을 확인한 뒤 적어 주세요.'
+              : '실제로 돌려준 금액을 적어 주세요.'}
         </p>
-        <Field label={paying ? '들어온 금액' : '돌려준 금액'} hint={paying ? '일부만 들어왔다면 그 금액만 적으면 돼요.' : undefined}>
+        <Field label={merchant ? '환불받은 금액' : paying ? '들어온 금액' : '돌려준 금액'} hint={paying ? '일부만 들어왔다면 그 금액만 적으면 돼요.' : undefined}>
           {(a) => <NumberInput {...a} suffix="원" value={amount} onValue={setAmount} />}
         </Field>
         {paying && amount !== null && amount > suggested && (
