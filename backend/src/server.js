@@ -9,10 +9,11 @@ const imageLimit = 5 * 1024 * 1024;
 const multipartLimit = imageLimit + bodyLimit;
 
 class RequestError extends Error {
-  constructor(status, code, fields) {
+  constructor(status, code, fields, reason) {
     super(code);
     this.status = status;
     this.fields = fields;
+    this.reason = reason;
   }
 }
 
@@ -71,14 +72,15 @@ async function readImage(request) {
     throw new RequestError(400, 'EXPECTED_ONE_IMAGE', ['image']);
   }
   if (image.size > imageLimit) throw new RequestError(413, 'BODY_TOO_LARGE');
+  for (const [name, value] of form) {
+    if (name !== 'image' && value instanceof File) {
+      throw new RequestError(400, 'EXPECTED_ONE_IMAGE', ['image']);
+    }
+  }
   const data = Buffer.from(await image.arrayBuffer());
   if (!supportedImage(data, image.type)) throw new RequestError(415, 'UNSUPPORTED_IMAGE', ['image']);
 
-  const rawPeople = form.get('people');
-  const people = typeof rawPeople === 'string' && /^[2-4]$/.test(rawPeople.trim()) ? Number(rawPeople) : undefined;
-  const options = validateOptions({ people, location: form.get('location') ?? undefined });
-  if (options.fields.length) throw new RequestError(422, 'INVALID_ANALYSIS_INPUT', options.fields);
-  return { mimeType: image.type, data, ...options };
+  return { mimeType: image.type, data };
 }
 
 export function createApp() {
@@ -93,10 +95,11 @@ export function createApp() {
         const { product, fields } = validateProduct(input?.product);
         const options = validateOptions(input);
         fields.push(...options.fields);
-        if (product.bulkTotalQty !== undefined && !options.fields.includes('people')
-          && product.bulkTotalQty < options.people) fields.push('bulkTotalQty');
+        if (!fields.length && product.bulkTotalQty / product.allocationStep < options.people) {
+          throw new RequestError(422, 'INVALID_ANALYSIS_INPUT', ['product.bulkTotalQty'], 'INSUFFICIENT_ALLOCATION_UNITS');
+        }
         if (fields.length) throw new RequestError(422, 'INVALID_ANALYSIS_INPUT', fields);
-        return send(response, 200, analyze(product, options.people, options.location));
+        return send(response, 200, analyze(product, input.product, options));
       }
       if (path === '/api/products/extract' && request.method === 'POST') {
         const { status, ...body } = await extractProduct(await readImage(request));
@@ -107,7 +110,7 @@ export function createApp() {
       if (response.destroyed) return;
       if (error instanceof RequestError) {
         if (error.status === 413) response.setHeader('Connection', 'close');
-        return send(response, error.status, { code: error.message, fields: error.fields });
+        return send(response, error.status, { code: error.message, fields: error.fields, reason: error.reason });
       }
       console.error('Unhandled request error', error);
       return send(response, 500, { code: 'INTERNAL_ERROR' });
