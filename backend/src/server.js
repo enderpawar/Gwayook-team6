@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { analyze, validateOptions, validateProduct } from './analysis.js';
+import { createExtractionGuard } from './extraction-guard.js';
 import { extractProduct } from './gemini.js';
 import { presets } from './presets.js';
 
@@ -102,7 +103,11 @@ export function createApp() {
         return send(response, 200, analyze(product, input.product, options));
       }
       if (path === '/api/products/extract' && request.method === 'POST') {
-        const { status, ...body } = await extractProduct(await readImage(request));
+        const image = await readImage(request);
+        const { status, retryAfter, ...body } = await extractionGuard.run({
+          callerId: request.socket.remoteAddress, ...image,
+        });
+        if (retryAfter !== undefined) response.setHeader('Retry-After', retryAfter);
         return send(response, status, body);
       }
       return send(response, 404, { code: 'NOT_FOUND' });

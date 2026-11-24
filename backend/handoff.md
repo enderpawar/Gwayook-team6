@@ -88,6 +88,12 @@ curl -i -F "image=@./capture.png;type=image/png" http://127.0.0.1:3001/api/produ
 
 혼합 장바구니 전체 금액으로 정산하지 않는다. 사용자가 상품별 금액을 확인한 뒤 `product.payment`로 입력한다. 포장수와 팩당 배분 수량을 확인해 이 예시에서는 `bulkTotalQty: 30`을 입력한다. `netAmountPerUnit`은 규격 확인에 쓰며 그 자체가 배분량이나 비교 소매가가 아니다. 판독은 비교값이나 프리셋을 연결하지 않는다.
 
+### 판독 요청 제한과 배포 경계
+
+보호는 파일 개수·형식·크기 검증을 통과한 `POST /api/products/extract`에만, Gemini 호출 전에 적용한다. 서버 인스턴스마다 같은 소켓 피어 IP는 첫 시도부터 60초 동안 6회(중복 판정까지 도달한 재요청 포함), 인스턴스 전체는 동시 판독 4건으로 제한한다. IP별 상태는 최대 1,024개이며 만료된다. 동일 IP의 동일 이미지가 이미 처리 중이면 그 요청에 합류하거나 결과를 공유하지 않는다. 완료된 이미지나 판독 결과를 캐시하지 않으며 프리셋·직접 입력 분석은 이 제한을 받지 않는다.
+
+키는 서버가 받아들인 연결의 `request.socket.remoteAddress`만 사용한다. `X-Forwarded-For`, `Forwarded`, `Authorization` 헤더와 P1 세션은 P0 판독 한도에 영향을 주지 않는다. 프록시나 NAT 뒤에서 같은 피어로 보이는 요청은 한도를 공유한다. 상태는 서버 메모리에만 있으므로 재시작 시 초기화되고 여러 인스턴스 간에 공유되지 않는다. 외부·다중 인스턴스 배포 전에는 신뢰할 수 있는 프록시·인증 경계와 인스턴스 간 공유 한도, 업로드 본문 자체의 인입 제한을 별도로 정해야 한다.
+
 ## 3. 확인된 상품 분석
 
 `POST /api/analyses`는 `application/json`이다. 직접 입력이든 캡처를 보정했든 같은 계약을 사용한다. 문자열의 앞뒤 공백과 연속 공백은 서버가 정리한다. 숫자와 불리언은 JSON 문자열이 아니라 각 타입으로 보낸다.
@@ -184,13 +190,15 @@ curl -i -H "Content-Type: application/json" --data-binary "@analysis.json" http:
 | `422 INVALID_ANALYSIS_INPUT` | `fields`의 `product.payment.shippingFee` 같은 경로 또는 `people`, `location` 등을 해당 입력란에 연결한다. `product.payment`는 합산 결제액 오류다. `reason: "INSUFFICIENT_ALLOCATION_UNITS"`이면 인원을 줄이거나 확인된 수량·최소 배분량을 수정한다. |
 | 업로드 `400 EXPECTED_ONE_IMAGE`, `413 BODY_TOO_LARGE`, `415 UNSUPPORTED_IMAGE` | 각각 파일 한 장, 5 MiB 이하, 허용 형식을 안내하고 파일 재선택을 제공한다. 분석의 `413`은 JSON 본문 16 KiB 제한이다. |
 | `400 INVALID_JSON`·`INVALID_MULTIPART`, `415 EXPECTED_JSON`·`EXPECTED_MULTIPART` | 요청 형식 오류로 구분한다. 값은 남기고 같은 잘못된 요청을 반복하지 않는다. |
-| `502 GEMINI_UNAVAILABLE`, `503 GEMINI_NOT_CONFIGURED`, `504 GEMINI_TIMEOUT` | `retryable`을 확인해 사용자 재시도 가능 여부를 표시하되, 직접 입력·프리셋은 계속 제공한다. 서버는 일시 실패에서만 최대 한 번 재호출하며 공유 제한은 3.5초다. `503`은 재시도 불가다. |
+| `429 EXTRACTION_IN_PROGRESS` / `EXTRACTION_RATE_LIMITED` / `EXTRACTION_BUSY` | 각각 동일 이미지 처리 중 / 피어 호출 한도 / 서버 용량 한도다. JSON의 `retryable`은 `true`, 대기 시간은 본문이 아닌 `Retry-After` 헤더의 정수 초다. 현재 이미지와 수정값을 보존하고 해당 시간 뒤 사용자가 재시도할 수 있게 한다. 진행 중인 원래 요청은 그대로 기다리며 자동 재전송하지 않는다. |
+| `503 EXTRACTION_CALLER_UNAVAILABLE` | 서버가 피어 IP를 확인할 수 없는 경우다. `retryable: false`이므로 캡처 재시도 대신 직접 입력·프리셋을 제공한다. |
+| `502 GEMINI_UNAVAILABLE`, `503 GEMINI_NOT_CONFIGURED`, `504 GEMINI_TIMEOUT` | `retryable`을 확인해 사용자 재시도 가능 여부를 표시하되, 직접 입력·프리셋은 계속 제공한다. 서버는 공급자 일시 실패에서만 3.5초 예산 안에 최대 한 번 재호출한다. `GEMINI_NOT_CONFIGURED`는 재시도 불가다. |
 | 기타 HTTP·네트워크·응답 파싱 오류 | 공통 오류를 표시하고 현재 입력은 유지한다. 이전 결과를 새 입력의 결과로 사용하지 않는다. |
 
 ## 인수 체크리스트
 
 1. 키 없이 프리셋과 직접 입력으로 계산·복사한다. 2~4인 수량·원화 총합, 방장/공구원 정산 차이, 예상·미정 문구가 응답과 같은지 확인한다.
-2. 캡처의 옵션·가격 후보, 상품별 금액이 빠진 혼합 장바구니, 형식 오류·타임아웃에서 입력을 복구한다. 이미지 교체 후 이전 응답이 폼을 덮지 않아야 한다. 실제 Gemini 판독 정확도는 별도로 확인한다.
+2. 캡처의 옵션·가격 후보, 상품별 금액이 빠진 혼합 장바구니, 형식 오류·타임아웃에서 입력을 복구한다. `429`에서는 `Retry-After`까지 새 판독을 막되 직접 입력은 가능해야 한다. 이미지 교체 후 이전 응답이 폼을 덮지 않아야 한다. 실제 Gemini 판독 정확도는 별도로 확인한다.
 3. 비교 보류·가격 역전·연간 횟수 미입력을 확인한다. 서버 모집글을 줄바꿈 그대로 미리 보여주고 복사하며, 성공·실패를 알린다. 권한이 차단되면 텍스트를 선택해 직접 복사할 수 있게 한다.
 4. 버튼 클릭부터 화면 렌더링까지 프리셋 1.2초, 이미지 결과 4초, 모집글 포함 핵심 결과 5초는 측정 목표다. 실제 화면 시간·쇼핑몰 가격은 미검증이다.
 
