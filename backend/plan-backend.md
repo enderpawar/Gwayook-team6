@@ -1,54 +1,36 @@
 # 긱스플리터 백엔드 구현 계획
 
-기준: `origin/main`의 [ERD](https://github.com/enderpawar/Gwayook-team6/blob/a3c59340272ec4b6c6592ea96f1840c548147371/docs/ERD.md), [PRD v1.1](https://github.com/enderpawar/Gwayook-team6/blob/a3c59340272ec4b6c6592ea96f1840c548147371/docs/GigSplitter-PRD-v1.1.md), [갱신된 v1.0 PDF](https://github.com/enderpawar/Gwayook-team6/blob/a3c59340272ec4b6c6592ea96f1840c548147371/docs/GigSplitter-PRD-v1.0.pdf) (`a3c5934`). **P0 사용자 동작과 계산은 PRD v1.1, 운영용 데이터는 ERD를 기준으로 계획한다.** 세 문서에 맞춰 판독 모델은 `gemini-3.8-flash`로 전환할 계획이다. 서로 다른 규칙은 아래에 따로 표시했다.
+기준: [PRD v1.1](../docs/GigSplitter-PRD-v1.1.md)의 P0 사용자 흐름과 계산 규칙, [ERD](../docs/ERD.md)의 P1 운영 모델. P0 백엔드는 계정과 DB 없이 동작하며, P1은 스키마 차이를 합의하기 전까지 구현 계획이다.
 
-## P0 — 로그인·DB 없는 시연 경로
+## P0 — 구현된 백엔드 범위
 
-`d7625ad`에 프리셋, 단가·정산, 모집글, Gemini 연동이 있다. 이 구현을 기반으로 현재 코드를 v1.1에 맞춘다. 익명 방문자의 계산·복사는 계정과 DB 저장에 의존하지 않는다.
+| 기능 | 현재 계약 |
+| --- | --- |
+| F-02 · 프리셋 | `GET /api/presets` → `200 { presets: [{ id, demo, product }] }`. 3종 모두 `demo: true`이고 분석 입력 형태의 `product`를 제공한다. 비교 기준가·규격·시연 출처는 `product.comparisonBaseline`에 있다. 실시간 시세가 아니다. |
+| F-01·F-09·F-11 · 판독/보정 | `POST /api/products/extract` → `200 { extraction }` 또는 `422 { code: 'MANUAL_CORRECTION_REQUIRED', extraction }`. 요청은 `multipart/form-data`의 JPG·PNG·WebP 한 장(`image`, 최대 5 MiB)이다. 판독값은 후보이며, 모델이 비교가나 프리셋을 연결하지 않는다. |
+| F-03~06·F-12 · 분석/모집글 | `POST /api/analyses`에 사용자 확인 JSON `{ product, people, location?, deadline?, applicationMethod? }`을 보낸다. `200`은 정규화 상품·옵션, `comparison`, `settlements`, `recruitment`를 반환한다. 입력 오류는 `422 INVALID_ANALYSIS_INPUT`; 비교 불가는 입력 오류가 아니라 `200`의 `comparison.status: 'PENDING'`이다. |
 
-| 순서 | 기능 | 기존 구현에서 바꿀 점 |
-| --- | --- | --- |
-| 1 | F-02~04·F-12 비교·정산 | 배분 단위와 비교 환산 단위를 분리한다. 규격·출처 확인 없이는 절감 지표만 보류하고 정산은 허용한다. 수량 비례 금액의 최대 잔여 방식과 개인별 절감액을 적용한다. |
-| 2 | F-05~06·F-13 모집 문구 | 기본 장소를 자동 적용하지 않고 미정 허용. 마감·신청 방법, 예상 금액, 개인별 부담금 차이를 문구에 반영한다. 프론트에서 미리보기와 복사 실패 복구를 연결한다. |
-| 3 | F-01·F-09·F-11 판독과 보정 | `gemini-3.8-flash`로 사진과 추출 규칙만 보내고 옵션·가격 후보, 배송비·할인, 근거와 미확인 필드를 받는다. 사용자 확인 전에는 후보를 확정값으로 사용하지 않는다. 일시 오류만 제한 재시도하고, 타임아웃·잘못된 JSON·혼합 장바구니 등은 기존 입력을 보존해 수동 보정 또는 프리셋으로 진행한다. |
+필드 검증, 오류 상태, 실행 가능한 요청·응답과 프론트 수용 기준은 [Frontend 핸드오프](./handoff.md)가 기준이다.
 
-**비교 정확도는 다음 배포 전 우선 수정.** 독립 검증에서 500ml × 24병이 2L × 24병 프리셋의 비교값을 사용했고, 휴지 30m/롤과 33m/롤은 환산 없이 같은 롤 단가로 비교됐다. 프리셋 ID나 병·롤 개수만으로 비교값을 연결하지 않는다. 규격을 별도 필드로 검증하고, 롤 길이가 다르면 확인된 공통 단위로 환산하거나 비교를 보류한다. 프리셋에는 시연 표시, 비교 상품 규격, 출처와 확인일을 포함한다. 검증에서 독립 확인하지 못한 가격은 검증된 실측값으로 표시하지 않는다.
+### 판독의 범위와 장애 처리
 
-프론트는 이미지 선택·미리보기, 장소 추천 칩, 수정 폼, 결과 표시, 클립보드 복사를 담당한다. 백엔드는 모집글을 생성하지만 에브리타임에 직접 게시하지 않는다.
+- 기본 모델은 [Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash), 서버의 `GEMINI_MODEL`로 변경 가능. 공급자에는 이미지와 추출 규칙만 보내며 인원·장소·연락처 같은 폼 정보는 보내지 않는다. 백엔드는 캡처를 저장하지 않는다. 사용자는 업로드 전에 이미지 자체에 포함된 주문번호·주소 등을 가린다.
+- `extraction`은 상품명, 옵션 후보·선택 표시, 포장수·팩당 수량·개별 순량과 단위, 상품 표시가·배송비·할인, 상품별 가격 후보·근거를 담는다. 알 수 없는 단일 값은 `null`이며 `unresolvedFields`를 함께 보낸다. 혼합 장바구니 전체 금액을 특정 상품 금액으로 확정하지 않는다. 필수값 부족·잘못된 판독 JSON에서는 `422`의 부분 판독값으로 수동 보정한다.
+- 일시적 공급자 오류만 한 번 더 시도하며, 시도와 대기 시간 모두 판독 처리의 3.5초 예산에 포함된다. 키 미설정은 `503`, 공급자 실패는 `502`, 시간 초과는 `504`; 이 응답에는 `retryable`이 있다. 프리셋과 직접 입력은 Gemini 키 없이 동작한다.
 
-## 프론트 연동 API
+### 분석 및 모집글 규칙
 
-아래는 **현재(v1.0 기반) 계약**이며 v1.1 구현 완료 상태가 아니다. 로컬 서버는 기본 `http://127.0.0.1:3001`에서 동작한다. 프론트 개발 서버에서 `/api`를 이 주소로 프록시한다.
+- 확인된 상품 금액에 아직 포함되지 않은 배송비를 더하고 아직 반영되지 않은 할인을 뺀다. 결제액은 원화 정수이며 처리 중 정확한 정수 연산을 사용한다. `isEstimate`는 생략하면 `true`다.
+- 최소 배분량(`allocationStep`)으로 나눈 전체 배분 단위를 2~4명에게 균등 배분하고 남는 수량은 방장에게 준다. 서로 다른 규격이 섞이거나 최소 단위가 부족하면 분석하지 않는다. 배분 단위 부족의 `422`는 `reason: 'INSUFFICIENT_ALLOCATION_UNITS'`로 구분한다.
+- 각 부담금은 `⌊총액 × 개인 배분량 ÷ 전체 배분량⌋`부터 시작한다. 남은 원은 잔여가 큰 순서로 1원씩 배정하며 동률이면 방장, 이후 응답 행 순서가 우선이다. 예: 30롤·17,701원·4명 → 방장 9롤·5,311원, 공구원 각 7롤·4,130원.
+- 배분 단위와 비교 환산 단위를 분리한다. 비교는 확인된 호환 규격과 출처, 양의 기준가가 있어야 `READY`다. 예를 들어 휴지는 m당, 생수는 병별 용량을 환산한 100ml당 기준으로 비교한다. `SAMPLE`은 등록된 시연 규격·비교값을 검증하며, 실제 상품은 사용자 확인 `USER_INPUT` 기준을 사용한다. 비교가 `PENDING`이어도 배분표와 문구를 반환한다.
+- `READY`의 각 정산 행에는 개인 환산량 기준의 `instantSavings`가 있고, 연간 구매 횟수를 입력한 경우에만 `annualSavings`가 있다. 음수 값은 가격 역전이나 개인 부담 증가를 뜻하며 숨기지 않는다. 반올림은 프론트 표시 또는 모집 문구 서식에만 적용한다.
+- 모집글에 방장·공구원 배분량과 부담금, 장소·마감·신청 방법을 담는다. 예상 부담금은 `예상`, 비어 있는 장소·마감은 `미정`이다. 비교 문장은 `READY`이면서 `USER_INPUT`일 때만 포함한다. 백엔드는 게시하거나 복사하지 않는다.
 
-| API | 요청 | 응답 |
-| --- | --- | --- |
-| `GET /api/presets` | 없음 | `{ presets: [{ id, product, sources }] }`. `sources`에 대용량·비교용 소포장 판매처가 포함된다. |
-| `POST /api/products/extract` | `multipart/form-data`: `image` 한 장(JPG/PNG/WEBP, 최대 5 MiB), `people`(`2`~`4`), `location`(선택) | `200 { product, comparisonSource }` 또는 `422 { code: 'MANUAL_CORRECTION_REQUIRED', product, fields, comparisonSource }`. `422`의 `product`에는 유효한 부분 판독값이 남는다. |
-| `POST /api/analyses` | `application/json`: `{ product, people, location? }` | `200 { product, people, location, comparison, settlements, recruitment }` 또는 `422 { code: 'INVALID_ANALYSIS_INPUT', fields }` |
+### 검증 범위와 프론트 경계
 
-`product`는 PRD §5의 `shortName`, `fullTitle`, `bulkTotalPrice`, `bulkTotalQty`, `unitName`, `smallPackQty`, `smallPackPrice`를 사용한다. `annualPurchaseCount` 기본값은 12회, `whyGood`은 선택이다. 프리셋·이미지 판독·수동 입력은 모두 같은 분석 API를 호출한다. 예: 프리셋에서 받은 `product`를 `{ product, people: 4, location: '정문 편의점' }`으로 보낸다.
-
-`comparison`에는 `displayUnitQuantity`, `bulkUnitPrice`, `smallUnitPrice`, `discountPercent`, `instantSavings`, `annualSavings`가 들어간다. `settlements`는 `{ member, role, quantity, amount }` 배열이며 첫 행이 `ORGANIZER`, 나머지는 `MEMBER`다. `recruitment`는 `{ title, body }`다.
-
-현재 판독 API는 캡처 비교값(`comparisonSource.kind: 'SCREENSHOT'`) 또는 프리셋 비교값(`'PRESET'`, `id`·`label`·`url` 포함)을 반환한다. 프리셋 매칭에서 확인하는 값은 모델이 고른 ID, 단위 이름, 전체 수량뿐이다. 비교값이 없으면 `fields`에 나열된 항목을 보정해 `/api/analyses`로 보낸다. 키 미설정(`503`), 공급자 오류(`502`), 3.5초 판독 타임아웃(`504`)에서도 수동 입력과 프리셋은 이용할 수 있다.
-
-현재 코드 기본값은 `gemini-3.5-flash-lite`다. 후속 코드 작업에서 [이미지·구조화 출력을 지원하는 `gemini-3.8-flash`](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash)로 기본값을 변경하고 `GEMINI_MODEL` 설정은 유지한다. 키는 서버에만 둔다. 캡처는 현재 저장하지 않고 판독 시 Gemini에 전송한다. 운영에서도 캡처 보관은 기본값으로 추가하지 않으며, 보관이 필요하면 기간·삭제 정책부터 정한다.
-
-v1.1 전환 시 프론트와 함께 세 응답을 갱신한다. 프리셋은 배분 단위·비교 환산 규격과 출처를, 판독 API는 `selectedOption`, `packCount`, `unitsPerPack`, `netAmountPerUnit`, `displayedTotalPrice`, `shippingFee`, `discountAmount`, `priceCandidates`, `evidence`, `unresolvedFields`를 상품명·단위와 함께 반환한다. 분석 API는 사용자가 확인한 결제 항목과 인원·장소를 받고, 비교 기준가가 없어도 배분표·모집글을 반환한다. 이때 비교 지표는 보류 상태로 표시한다.
-
-## 목표 계산 계약 — PRD v1.1 §4
-
-- 결제 총액은 상품 금액 + 실제 배송비 − 확인한 할인이다. 이미 해당 항목을 반영한 가격에는 다시 더하거나 빼지 않는다. 비교 기준가는 출처 있는 프리셋 또는 사용자 입력에서 받는다.
-- 배분 수량은 최대한 균등하게 나누고 나머지를 방장에게 준다. 2~4명 중 한 명이라도 최소 분할 단위를 받지 못하거나 분할 단위가 균일하지 않으면 자동 배분하지 않는다.
-- 각자의 금액은 `⌊총액 × 개인 수량 ÷ 총 배분 수량⌋`부터 시작한다. 남는 원은 나눗셈의 나머지가 큰 순서대로 1원씩 배정하고, 동률이면 방장, 이후 참여 확정 순서가 우선이다. 정수 연산을 사용하고 합계는 결제 총액과 같아야 한다.
-- 비교 단가는 환산량 기준으로 계산한다. 개인별 절감액은 `개인 환산량 × 소용량 단가 − 개인 부담금`이며 음수를 그대로 표시한다. 원 단위 반올림은 표시 마지막에 하고, 연간 예상치는 사용자가 구매 횟수를 입력한 경우에만 계산한다.
-
-## 검증 기준
-
-- 2·3·4명에서 수량·금액 합계 및 동률 우선순위를 검사한다. 30롤·17,701원·4명의 기대값은 방장 **9롤·5,311원**, 공구원 각 **7롤·4,130원**이다. 기존 `4,426 / 4,425원` 기준을 교체한다.
-- 500ml × 24병과 2L × 24병은 병 개수만으로 매칭하지 않는다. 30m·33m 휴지는 동일 기준으로 환산하거나 비교를 보류한다. 비교가 없는 경우에도 정산·모집글은 생성된다.
-- 실제 이미지에서 저해상도, 복수 옵션, 쿠폰·배송비, 혼합 장바구니를 확인한다. 타임아웃·잘못된 JSON에도 입력값을 유지하고, 교체한 이미지에 이전 응답이 적용되지 않아야 한다.
-- 프리셋 1.2초, 이미지 결과 4초, 모집글 포함 핵심 결과 5초는 화면 렌더링까지의 성능 목표다. 기존 독립 검증은 `npm test` 5개와 대체 공급자 HTTP 시나리오까지이며 실제 Gemini 호출과 목표 시간은 미검증이다.
+- 계약 검증 대상: 2~4인 수량·금액 보존과 잔여 우선순위, 규격 불일치·가격 미입력 시 정산 유지, 음수 절감, 후보·부분값 보존, 혼합 장바구니, 재시도와 시간 초과. 대체 공급자 응답은 실제 쇼핑몰 판독 정확도나 시세 검증을 뜻하지 않는다.
+- 프론트는 판독값 확인·수정, 이미지 교체 후 오래된 응답 폐기, 개인정보 가림 안내, 복사 성공·실패와 수동 복사를 담당한다. 버튼 클릭부터 화면 렌더링까지 프리셋 1.2초, 이미지 결과 4초, 모집글 포함 핵심 결과 5초는 목표이며 미측정이다. 실제 이미지 판독과 가격 데이터 검증도 별도다.
 
 ## P1 — ERD 기반 운영 저장
 
