@@ -55,6 +55,7 @@ export function inviteView(g: Gig, userId: string, now: Date): InviteView {
   const guests = est.ok ? est.shares.slice(1) : []
   const comparison = compare(g.product, g.reference)
   const isHost = g.hostId === userId
+  const settled = latest(g)
   return {
     code: g.inviteCode,
     status: g.status,
@@ -77,7 +78,8 @@ export function inviteView(g: Gig, userId: string, now: Date): InviteView {
           max: Math.max(...guests.map((s) => s.amount)),
         }
       : null,
-    savingsRate: comparison.ok ? comparison.savingsRate : null,
+    // 주문을 확정했으면 실제 금액 기준, 아니면 모집 때 보여준 값
+    savingsRate: settled ? (settled.comparison?.savingsRate ?? null) : comparison.ok ? comparison.savingsRate : null,
     isHost,
     hostGigId: isHost ? g.id : null,
     me: myView(g, userId),

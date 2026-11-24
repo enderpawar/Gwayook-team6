@@ -212,6 +212,10 @@ describe('권한별 보기와 공유문', () => {
     expect(JSON.stringify(outsider)).not.toMatch(/"pickup":|"balance":|"share":/)
     expect(inviteView(g, 'A', new Date(clock)).me).toMatchObject({ share: { amount: 4130 }, pickup: { place: '학교 정문' } })
   })
+  it('확정 뒤에는 실제 금액으로 절감률을 보여준다', () => {
+    const g = settling(order({ shippingFee: 3000 }))
+    expect(inviteView(g, 'A', new Date(clock)).savingsRate?.toFixed(1)).toBe('46.9')
+  })
   it('정산 공유문에는 별칭만 담긴다', () => {
     const t = settlementShareText(settling())!
     for (const s of ['17,700원', '방장이(방장): 9롤, 5,310원', 'A: 7롤, 4,130원', '수령 장소: 학교 정문']) expect(t).toContain(s)
