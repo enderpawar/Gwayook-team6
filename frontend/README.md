@@ -22,31 +22,14 @@ npm run build
 - `src/components` 공통 UI
 - `mock` 개발용 모의 응답
 
-## 백엔드 API (제안)
+## 백엔드 API
 
-`POST /api/extractions`, `multipart/form-data`, 필드 이름 `image`. 주소는 `VITE_API_BASE_URL`로 바꿉니다. 스키마는 `src/api/extraction.ts`에 있습니다.
+판독은 `POST /api/products/extract`, `multipart/form-data`, 필드 `image` 한 장입니다. 백엔드는 `200 { extraction }` 또는 `422 { code: 'MANUAL_CORRECTION_REQUIRED', extraction }`을 돌려주고, `src/api/extraction.ts`의 `parseResponse`가 이를 확인 폼 초안으로 바꿉니다. 필드와 오류 코드는 [백엔드 연동 문서](../backend/handoff.md)를 따릅니다.
 
-```json
-{
-  "fullTitle": "생수 2L 24병",
-  "shortName": "생수",
-  "selectedOption": null,
-  "packCount": 4,
-  "unitsPerPack": 6,
-  "netAmountPerUnit": { "value": 2, "unit": "L" },
-  "unitName": "병",
-  "displayedTotalPrice": 16800,
-  "shippingFee": null,
-  "discountAmount": 0,
-  "priceCandidates": [{ "amount": 16800, "kind": "판매가", "condition": null, "evidence": "16,800원" }],
-  "evidence": {},
-  "unresolvedFields": ["shippingFee"]
-}
-```
-
-- 확인하지 못한 값은 `null`로 보냅니다. `netAmountPerUnit.unit`은 `ml`, `L`, `g`, `kg`, `m` 중 하나입니다.
-- 502, 503, 504와 네트워크 오류는 한 번 재시도합니다. 전체 제한 시간은 15초입니다.
-- 429는 호출 한도, 400·413·415·422는 분석할 수 없는 이미지로 안내합니다.
+- 개발 서버는 `/api`를 `http://127.0.0.1:3001`로 넘깁니다. 다른 주소를 쓰려면 `VITE_API_BASE_URL`을 지정합니다.
+- 502·503·504와 네트워크 오류는 한 번 재시도합니다. 전체 제한 시간은 15초입니다. `503 GEMINI_NOT_CONFIGURED`는 재시도하지 않습니다.
+- 429는 호출 한도, 400·413·415와 그 밖의 422는 분석할 수 없는 이미지로 안내합니다.
+- 정산·단가 비교·모집글은 프론트가 계산합니다(`src/domain`). P0에서는 `/api/analyses`, `/api/presets`를 호출하지 않습니다.
 
 ## ERD와 다른 점
 

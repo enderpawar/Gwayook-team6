@@ -1,8 +1,10 @@
 import type { Plugin } from 'vite'
 
-const price = (amount: number, kind: string, condition: string | null) => ({
+// backend/src/gemini.js 와 같은 모양({ extraction })으로 돌려준다.
+const price = (amount: number, type: string, condition: string | null) => ({
   amount,
-  kind,
+  type,
+  option: null,
   condition,
   evidence: `${amount.toLocaleString('ko-KR')}원`,
 })
@@ -18,9 +20,10 @@ const base = {
   displayedTotalPrice: 15900,
   shippingFee: null,
   discountAmount: 0,
+  mixedCart: false,
   optionCandidates: [],
-  priceCandidates: [],
-  evidence: {},
+  priceCandidates: [price(15900, 'DISPLAYED_TOTAL', null)],
+  evidence: ['150매 x 12롤', '15,900원'],
   unresolvedFields: ['shippingFee'],
 }
 
@@ -46,17 +49,17 @@ export function mockExtraction(): Plugin {
           }
           const body = name.includes('bad')
             ? '{"fullTitle": '
-            : JSON.stringify(
-                name.includes('multi')
+            : JSON.stringify({
+                extraction: name.includes('multi')
                   ? {
                       ...base,
                       selectedOption: null,
                       optionCandidates: ['150매 x 12롤', '200매 x 12롤'],
                       displayedTotalPrice: null,
-                      priceCandidates: [price(15900, '판매가', null), price(13900, '쿠폰 적용가', '첫 구매 쿠폰')],
+                      priceCandidates: [price(15900, 'SALE_PRICE', null), price(13900, 'COUPON_PRICE', '첫 구매 쿠폰')],
                     }
                   : base,
-              )
+              })
           setTimeout(() => {
             res.setHeader('content-type', 'application/json')
             res.end(body)

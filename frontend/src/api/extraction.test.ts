@@ -106,6 +106,55 @@ describe('현재 백엔드(v1.0) 응답', () => {
   })
 })
 
+describe('백엔드 응답 { extraction }', () => {
+  // backend/src/gemini.js resultFor() 가 돌려주는 모양 그대로
+  const extraction = {
+    fullTitle: '3겹 롤휴지 30m × 30롤', shortName: '3겹 롤휴지', selectedOption: null,
+    optionCandidates: ['30롤', '24롤'], packCount: 1, unitsPerPack: 30,
+    netAmountPerUnit: { amount: 3000, unit: 'cm' }, unitName: '롤', mixedCart: false,
+    displayedTotalPrice: 17701, shippingFee: 0, discountAmount: null,
+    priceCandidates: [
+      { amount: 17701, type: 'DISPLAYED_TOTAL', option: '30롤', condition: null, evidence: '17,701원' },
+      { amount: 15900, type: 'COUPON_PRICE', option: null, condition: '첫 구매 쿠폰', evidence: '15,900원' },
+    ],
+    evidence: ['30m × 30롤', '17,701원'],
+    unresolvedFields: ['selectedOption', 'discountAmount'],
+  }
+
+  it('200 응답을 확인 폼 초안으로 바꾼다', async () => {
+    const d = await run(vi.fn(async () => json({ extraction })))
+    expect(d.reference).toBeNull()
+    expect(d.product).toMatchObject({
+      fullTitle: '3겹 롤휴지 30m × 30롤', packCount: 1, unitsPerPack: 30, unitName: '롤',
+      netAmountPerUnit: 30, measure: 'm', shippingMode: 'none', discountMode: 'unknown',
+      optionCandidates: ['30롤', '24롤'],
+    })
+    expect(d.product.priceCandidates).toEqual([
+      { amount: 17701, kind: '표시 합계', condition: '30롤', evidence: '17,701원' },
+      { amount: 15900, kind: '쿠폰 적용가', condition: '첫 구매 쿠폰', evidence: '15,900원' },
+    ])
+    expect(d.product.unresolvedFields).toEqual(expect.arrayContaining(['selectedOption', 'discountAmount', 'displayedPrice']))
+  })
+
+  it('422 MANUAL_CORRECTION_REQUIRED 도 읽은 값을 남긴다', async () => {
+    const partial = { ...extraction, displayedTotalPrice: null, priceCandidates: [], packCount: null, netAmountPerUnit: { amount: 2, unit: 'L' } }
+    const f = vi.fn(async () => json({ code: 'MANUAL_CORRECTION_REQUIRED', extraction: partial }, 422))
+    const d = await run(f)
+    expect(d.product).toMatchObject({ fullTitle: '3겹 롤휴지 30m × 30롤', packCount: null, displayedPrice: null, netAmountPerUnit: 2000, measure: 'ml' })
+    expect(d.product.unresolvedFields).toEqual(expect.arrayContaining(['packCount', 'displayedPrice']))
+    expect(f).toHaveBeenCalledTimes(1)
+  })
+
+  it('mm 는 m 로 환산한다', () => {
+    const d = parseResponse(JSON.stringify({ extraction: { ...extraction, netAmountPerUnit: { amount: 1500, unit: 'mm' } } }))
+    expect(d.product).toMatchObject({ netAmountPerUnit: 1.5, measure: 'm' })
+  })
+
+  it('모양이 다르면 invalid', () => {
+    expect(() => parseResponse(JSON.stringify({ extraction: { fullTitle: 1 } }))).toThrow(ExtractionError)
+  })
+})
+
 describe('옵션 후보', () => {
   it('여러 개면 고르기 전까지 미확인으로 둔다', () => {
     const d = toProductDraft({ ...good, optionCandidates: ['24병', '48병'] })

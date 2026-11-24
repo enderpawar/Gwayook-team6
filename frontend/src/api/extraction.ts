@@ -54,6 +54,78 @@ const legacySchema = z.object({
     .nullish(),
 })
 
+/** backend/src/gemini.js 가 `{ extraction }` 으로 보내는 값. 200 과 422 MANUAL_CORRECTION_REQUIRED 모두 같은 모양이다. */
+const backendExtractionSchema = z.object({
+  fullTitle: z.string().nullable(),
+  shortName: z.string().nullable(),
+  selectedOption: z.string().nullable(),
+  optionCandidates: z.array(z.string()),
+  packCount: z.number().int().nullable(),
+  unitsPerPack: z.number().int().nullable(),
+  netAmountPerUnit: z
+    .object({ amount: z.number().positive(), unit: z.enum(['ml', 'L', 'g', 'kg', 'mm', 'cm', 'm']) })
+    .nullable(),
+  unitName: z.string().nullable(),
+  displayedTotalPrice: z.number().int().nullable(),
+  shippingFee: z.number().int().nullable(),
+  discountAmount: z.number().int().nullable(),
+  priceCandidates: z.array(
+    z.object({
+      amount: z.number().int(),
+      type: z.string(),
+      option: z.string().nullable(),
+      condition: z.string().nullable(),
+      evidence: z.string(),
+    }),
+  ),
+  evidence: z.array(z.string()),
+  unresolvedFields: z.array(z.string()),
+})
+
+const PRICE_KIND: Record<string, string> = {
+  LIST_PRICE: '정가',
+  SALE_PRICE: '판매가',
+  COUPON_PRICE: '쿠폰 적용가',
+  MEMBER_PRICE: '회원가',
+  DISPLAYED_TOTAL: '표시 합계',
+  CHECKOUT_TOTAL: '결제 예정 금액',
+  OTHER: '기타',
+}
+
+/** 백엔드 판독 값을 이 앱의 추출 스키마로 옮긴다. 길이 단위는 m 로 맞춘다. */
+function fromBackend(x: z.infer<typeof backendExtractionSchema>): unknown {
+  const net = x.netAmountPerUnit
+  const netAmountPerUnit =
+    net === null
+      ? null
+      : net.unit === 'mm'
+        ? { value: net.amount / 1000, unit: 'm' }
+        : net.unit === 'cm'
+          ? { value: net.amount / 100, unit: 'm' }
+          : { value: net.amount, unit: net.unit }
+  return {
+    fullTitle: x.fullTitle,
+    shortName: x.shortName,
+    selectedOption: x.selectedOption,
+    optionCandidates: x.optionCandidates.slice(0, 10),
+    packCount: x.packCount,
+    unitsPerPack: x.unitsPerPack,
+    netAmountPerUnit,
+    unitName: x.unitName,
+    displayedTotalPrice: x.displayedTotalPrice,
+    shippingFee: x.shippingFee,
+    discountAmount: x.discountAmount,
+    priceCandidates: x.priceCandidates.slice(0, 10).map((c) => ({
+      amount: c.amount,
+      kind: PRICE_KIND[c.type] ?? '기타',
+      condition: [c.option, c.condition].filter(Boolean).join(' · ') || null,
+      evidence: c.evidence,
+    })),
+    evidence: Object.fromEntries(x.evidence.map((line, i) => [String(i + 1), line])),
+    unresolvedFields: x.unresolvedFields,
+  }
+}
+
 export interface ExtractedDraft {
   product: ProductDraft
   /** 캡처나 서버 프리셋에서 찾은 비교 값. 규격은 사용자가 확인하기 전까지 같다고 보지 않는다. */
@@ -167,13 +239,19 @@ function errorCode(text: string): string | null {
   }
 }
 
-/** v1.1 응답(필드가 바로 있거나 product 안에 있음)과 현재 백엔드 응답을 모두 읽는다. */
+/** 백엔드 응답({ extraction }), v1.1 응답(필드가 바로 있거나 product 안에 있음), 이전 백엔드 응답을 모두 읽는다. */
 export function parseResponse(text: string): ExtractedDraft {
   let json: unknown
   try {
     json = JSON.parse(text)
   } catch {
     throw new ExtractionError('invalid')
+  }
+  if (typeof json === 'object' && json !== null && 'extraction' in json) {
+    const backend = backendExtractionSchema.safeParse(json.extraction)
+    const next = backend.success ? extractionSchema.safeParse(fromBackend(backend.data)) : null
+    if (!next?.success) throw new ExtractionError('invalid')
+    return { product: toProductDraft(next.data), reference: null }
   }
   const body = typeof json === 'object' && json !== null && 'product' in json ? json.product : json
   const next = extractionSchema.safeParse(body)
