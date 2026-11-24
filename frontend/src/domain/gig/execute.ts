@@ -254,6 +254,10 @@ export function execute(gig: Gig, command: Command, ctx: Context): Gig {
       log('공구를 완료했어요.')
       break
     }
+    case 'confirmPending':
+    case 'merchantRefund':
+    case 'rotateInvite':
+      return fail('unsupported', '서버에 연결했을 때만 할 수 있어요.')
     case 'cancel': {
       requireStatus(g, 'recruiting', 'closed', 'settling', 'pickup')
       if (!command.reason.trim()) fail('reason', '취소하는 이유를 입력하세요.')

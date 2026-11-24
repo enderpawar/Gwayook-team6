@@ -1,12 +1,14 @@
 import { paymentTotal, totalUnits } from '../product'
 import { settle, type Settlement } from '../settlement'
-import type { Gig, Participant, SettlementVersion, ShareKey } from './types'
+import type { Balance, Gig, Participant, SettlementVersion, ShareKey } from './types'
+
+export type { Balance }
 
 /** 승인 순서대로 정렬한 확정 참여자 */
 export const approved = (g: Gig): Participant[] =>
   g.participants
     .filter((p) => p.status === 'approved')
-    .sort((a, b) => (a.approvedAt ?? '').localeCompare(b.approvedAt ?? ''))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.approvedAt ?? '').localeCompare(b.approvedAt ?? ''))
 
 export const applicants = (g: Gig) => g.participants.filter((p) => p.status === 'applied')
 
@@ -24,17 +26,9 @@ export const estimate = (g: Gig): Settlement =>
 export const deadlinePassed = (g: Gig, now: Date) =>
   g.plan.deadline !== null && new Date(g.plan.deadline).getTime() <= now.getTime()
 
-export interface Balance {
-  due: number
-  received: number
-  refunded: number
-  reported: number
-  /** 양수면 더 받아야 하고, 음수면 돌려줘야 한다. */
-  remaining: number
-}
-
 /** 한 참여자의 금액 상태. 취소되었거나 명단에서 빠졌으면 받을 금액은 0 이다. */
 export function balance(g: Gig, key: ShareKey): Balance {
+  if (g.server) return g.server.balances[key] ?? { due: 0, received: 0, refunded: 0, reported: 0, remaining: 0 }
   const row = latest(g)?.shares.find((s) => s.key === key)
   const due = g.status === 'cancelled' ? 0 : (row?.amount ?? 0)
   const sum = (kind: string) =>
@@ -48,6 +42,7 @@ export function balance(g: Gig, key: ShareKey): Balance {
 export function moneyKeys(g: Gig): string[] {
   const keys = new Set<string>()
   for (const s of latest(g)?.shares ?? []) if (s.key !== 'host') keys.add(s.key)
+  for (const [key, b] of Object.entries(g.server?.balances ?? {})) if (key !== 'host' && b.received > 0) keys.add(key)
   for (const p of g.payments) if (p.kind !== 'reported') keys.add(p.key)
   return [...keys]
 }
@@ -63,7 +58,8 @@ export const unconfirmed = (g: Gig): string[] => {
 /** 완료를 막는 이유. 비어 있으면 완료할 수 있다. */
 export function completionBlockers(g: Gig): string[] {
   const out: string[] = []
-  const rows = (latest(g)?.shares ?? []).filter((s) => s.key !== 'host')
+  // 서버는 방장의 수령도 확인한다.
+  const rows = (latest(g)?.shares ?? []).filter((s) => g.server || s.key !== 'host')
   const waiting = rows.filter((s) => !g.pickedUp[s.key])
   if (waiting.length) out.push(`수령 확인이 남았어요: ${waiting.map((s) => s.alias).join(', ')}`)
   const pending = unconfirmed(g)
@@ -73,6 +69,7 @@ export function completionBlockers(g: Gig): string[] {
     if (remaining > 0) out.push(`${aliasOf(g, key)}에게 받을 금액이 ${remaining.toLocaleString('ko-KR')}원 남았어요`)
     if (remaining < 0) out.push(`${aliasOf(g, key)}에게 돌려줄 금액이 ${(-remaining).toLocaleString('ko-KR')}원 남았어요`)
   }
+  if (g.server?.refundUnapplied) out.push('판매처 환불을 반영한 새 정산을 확정해 주세요')
   const open = g.issues.filter((i) => !i.resolvedAt)
   if (open.length) out.push(`해결하지 않은 문제가 ${open.length}건 있어요`)
   return out

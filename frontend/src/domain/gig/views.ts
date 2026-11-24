@@ -43,6 +43,8 @@ export interface MyView {
     amount: number
     saved: number | null
     needsConfirm: boolean
+    /** 방장이 아직 확정하지 않은 정산인지 */
+    waiting: boolean
     before: Amounts | null
   } | null
   balance: Balance | null
@@ -110,6 +112,7 @@ function myView(g: Gig, userId: string): MyView | null {
             amount: row.amount,
             saved: row.saved,
             needsConfirm: v.needsConfirm.includes(p.id) && !v.confirmed[p.id],
+            waiting: false,
             before: shown ? { units: formatUnits(g.product, shown.units), amount: shown.amount } : null,
           }
         : null,
