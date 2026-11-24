@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const migrations = [new URL('./001-initial.sql', import.meta.url)];
+const migrations = ['./001-initial.sql', './002-settlement.sql'].map((path) => new URL(path, import.meta.url));
 
 export class P1Error extends Error {
   constructor(status, code, fields) {

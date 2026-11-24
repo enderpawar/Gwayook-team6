@@ -1,5 +1,6 @@
 import { login, logout, register, requireUser } from './auth.js';
 import { P1Error } from './db.js';
+import { readSavings, settlementRequest } from './settlement-routes.js';
 import {
   applyToGroup, approve, createDraft, deleteDraft, editRecruitment, exclude, listGroups, publishGroup,
   readGroup, readInvite, rotateInvite, saveDraft, setRecruitmentOpen, withdraw,
@@ -28,6 +29,10 @@ export function createP1Handler(store, { readJson, send }) {
           return reply(204);
         }
       }
+      if (resource === 'savings' && id === undefined && method === 'GET') {
+        const { id: userId } = requireUser(store.db, request);
+        return reply(200, readSavings(store.db, userId));
+      }
       if (resource === 'invites' && id && target === undefined) {
         if (section === undefined && method === 'GET') return reply(200, readInvite(store, id));
         if (section === 'applications' && method === 'POST') {
@@ -43,6 +48,11 @@ export function createP1Handler(store, { readJson, send }) {
         }
         if (uuid.test(id ?? '')) {
           const { id: userId } = requireUser(store.db, request);
+          if (section === 'settlement') {
+            const result = await settlementRequest(store, { id, userId, method, target, action,
+              readBody: () => readJson(request) });
+            if (result !== null) return reply(200, result);
+          }
           if (section === undefined) {
             if (method === 'GET') return reply(200, readGroup(store, id, userId));
             if (method === 'PUT') return reply(200, saveDraft(store, id, userId, await readJson(request)));
