@@ -86,7 +86,8 @@ async function readImage(request) {
   return { mimeType: image.type, data };
 }
 
-export function createApp({ p1DbPath = process.env.P1_DB_PATH } = {}) {
+export function createApp({ p1DbPath = process.env.P1_DB_PATH, extract = extractProduct } = {}) {
+  const extractionGuard = createExtractionGuard({ extract });
   const store = p1DbPath ? openP1Database(p1DbPath) : null;
   const handleP1 = store && createP1Handler(store, { readJson, send });
   const server = createServer(async (request, response) => {
