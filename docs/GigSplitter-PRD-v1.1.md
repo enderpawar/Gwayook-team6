@@ -86,7 +86,7 @@ P1에서 방장은 인증된 계정으로 공구를 관리한다. 참여자는 �
 
 ## 6. Gemini 및 데이터 명세
 
-- 원본의 Gemini 2.5 Flash는 모델 후보로 유지한다. 착수 시 사용 환경에서 이미지 입력과 구조화 출력 지원을 확인하고 모델 이름을 서버 설정으로 관리한다.
+- 원본의 Gemini 3.8 Flash는 모델 후보로 유지한다. 착수 시 사용 환경에서 이미지 입력과 구조화 출력 지원을 확인하고 모델 이름을 서버 설정으로 관리한다.
 - 추출 요청은 이미지와 추출 규칙을 전송한다. 모델은 이미지 속 문구를 분석 대상 데이터로 취급한다. 방장 입력, 연락처, 수령 장소, 입금 데이터는 상품 추출에 필요하지 않다.
 - 추출 규칙은 화면에 보이는 값만 반환하고 불확실한 값은 null로 반환하도록 지정한다. 상품 수량, 배송비, 쿠폰 가격의 적용 조건을 임의로 채우지 않는다. 모델 결과는 스키마와 범위를 검증한 뒤 사용자 확인 화면에 표시한다.
 - 추출 필드는 `fullTitle`, `shortName`, `selectedOption`, `packCount`, `unitsPerPack`, `netAmountPerUnit`, `unitName`, `displayedTotalPrice`, `shippingFee`, `discountAmount`, `priceCandidates`, `evidence`, `unresolvedFields`로 구성한다. 가격 후보는 원화 금액, 가격 유형, 적용 조건, 화면 근거 문구를 포함한다.
