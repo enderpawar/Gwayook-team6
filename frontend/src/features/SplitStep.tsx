@@ -5,7 +5,8 @@ import { Sticker } from '@/components/Sticker'
 import { Button } from '@/components/ui/Button'
 import { Notice } from '@/components/ui/Notice'
 import { Segmented } from '@/components/ui/Segmented'
-import { displayName } from '@/domain/product'
+import { seatName } from '@/components/seats'
+import { displayName, formatUnits, isDirectSplit, unitParts } from '@/domain/product'
 import { MIN_HEADCOUNT } from '@/domain/settlement'
 import type { Measure } from '@/domain/types'
 import { josa, num, percent, won } from '@/lib/format'
@@ -46,14 +47,14 @@ export function SplitStep({ flow }: { flow: Flow }) {
           {settlement.ok ? (
             <SplitBoard
               allocation={settlement.shares.map((s) => s.units)}
-              unitName={product.unitName}
+              unitName={isDirectSplit(product) ? product.measure : product.unitName}
+              format={(n) => formatUnits(product, n)}
               className="mt-3"
             />
           ) : settlement.reason === 'tooFewUnits' ? (
             <Notice tone="error" className="mt-3 bg-surface">
               <p>
-                전체 {units}
-                {josa(product.unitName, '이라', '라')} {plan.headcount}명이 하나씩 받을 수 없어요.
+                전체 {josa(formatUnits(product, units ?? 0), '이라', '라')} {plan.headcount}명이 하나씩 받을 수 없어요.
               </p>
               {settlement.maxHeadcount >= MIN_HEADCOUNT ? (
                 <Button
@@ -78,11 +79,17 @@ export function SplitStep({ flow }: { flow: Flow }) {
           {settlement.ok && (
             <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
               <SettlementTicket
-                settlement={settlement}
-                comparison={comparison}
-                unitName={product.unitName}
-                estimated={payment.estimated}
                 title={name}
+                caption={payment.estimated ? '예상 정산표' : '확정 금액 정산표'}
+                total={settlement.total}
+                totalUnits={formatUnits(product, settlement.totalUnits)}
+                rows={settlement.shares.map((s) => ({
+                  id: String(s.seat),
+                  name: seatName(s.seat),
+                  units: unitParts(product, s.units),
+                  amount: s.amount,
+                  saved: comparison.ok ? comparison.savedFor(s.units, s.amount) : null,
+                }))}
               />
             </div>
           )}
@@ -96,7 +103,7 @@ export function SplitStep({ flow }: { flow: Flow }) {
                   comparison={comparison}
                   bulkName={name}
                   referenceName={reference.name.trim() || '소용량 상품'}
-                  bulkNote={`${won(payment.total)} ÷ ${amountText(units, product.netAmountPerUnit, product.measure, product.unitName)}`}
+                  bulkNote={`${won(payment.total)} ÷ ${isDirectSplit(product) ? formatUnits(product, units) : amountText(units, product.netAmountPerUnit, product.measure, product.unitName)}`}
                   referenceNote={`${won(reference.price!)} ÷ ${amountText(reference.unitCount!, reference.netAmountPerUnit, reference.measure, product.unitName)}`}
                 />
                 <Savings flow={flow} />
@@ -134,7 +141,7 @@ function Savings({ flow }: { flow: Flow }) {
 function Source({ flow }: { flow: Flow }) {
   const r = flow.state.reference
   const label =
-    r.sourceKind === 'preset' ? '시연용 예시 값' : r.sourceKind === 'link' ? '입력한 링크' : '직접 입력'
+    { preset: '시연용 예시 값', serverPreset: '서버 시연 데이터', capture: '캡처에서 읽음', link: '입력한 링크', manual: '직접 입력' }[r.sourceKind]
   return (
     <p className="mt-2 text-sm text-ink-soft">
       비교 가격 출처: {label}

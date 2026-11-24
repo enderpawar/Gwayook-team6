@@ -4,10 +4,11 @@ import { CopyPanel } from '@/components/CopyPanel'
 import { Field, TextInput } from '@/components/ui/Field'
 import { cn } from '@/lib/cn'
 import type { Flow } from './flow'
+import { PublishPanel } from './PublishPanel'
 
 const PLACES = ['행복기숙사 1동 로비', '학교 정문', '도서관 앞', '학생회관 1층']
 
-export function PostStep({ flow }: { flow: Flow }) {
+export function PostStep({ flow, onPublish }: { flow: Flow; onPublish: (alias: string) => Promise<void> }) {
   const { state, actions, post } = flow
   const { plan } = state
   const [custom, setCustom] = useState(plan.place !== null && !PLACES.includes(plan.place))
@@ -96,7 +97,10 @@ export function PostStep({ flow }: { flow: Flow }) {
             )}
           </Field>
         </section>
-        {post && <CopyPanel post={post} />}
+        <div className="space-y-6">
+          {post && <CopyPanel post={post} />}
+          {post && <PublishPanel onPublish={onPublish} />}
+        </div>
       </div>
     </div>
   )

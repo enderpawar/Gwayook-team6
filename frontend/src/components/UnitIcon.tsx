@@ -3,7 +3,7 @@ export function UnitIcon({ unit, className }: { unit: string; className?: string
   const u = unit.trim()
   return (
     <svg viewBox="0 0 24 24" aria-hidden className={className} fill="currentColor">
-      {u === '롤' ? <Roll /> : u === '병' ? <Bottle /> : u === '팩' || u === '봉' ? <Pouch /> : <Box />}
+      {u === 'ml' || u === 'g' ? <Drop /> : u === '롤' ? <Roll /> : u === '병' ? <Bottle /> : u === '팩' || u === '봉' ? <Pouch /> : <Box />}
     </svg>
   )
 }
@@ -31,6 +31,13 @@ const Pouch = () => (
     <path d="M14.6 1.2h4v3.4h-4z" />
     <path d="M5 4.6h14l1 16.2c.1 1.1-.7 2-1.8 2H5.8c-1.100 0-1.900-.9-1.800-2Z" opacity=".35" />
     <path d="M12 9.400c2 2.500 3.300 4.100 3.300 6a3.300 3.300 0 0 1-6.600 0c0-1.900 1.300-3.500 3.300-6Z" />
+  </>
+)
+
+const Drop = () => (
+  <>
+    <path d="M12 1.6c4.6 5.400 7.600 9.200 7.600 13.200a7.600 7.600 0 0 1-15.200 0c0-4 3-7.800 7.600-13.200Z" opacity=".35" />
+    <path d="M12 8c2.600 3.100 4.200 5.200 4.200 7.200a4.200 4.200 0 0 1-8.400 0c0-2 1.600-4.100 4.200-7.200Z" />
   </>
 )
 
