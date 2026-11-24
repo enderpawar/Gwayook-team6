@@ -1,6 +1,6 @@
 import { formatDeadline, percent, won } from '@/lib/format'
 import type { Comparison } from './comparison'
-import { displayName } from './product'
+import { displayName, formatUnits } from './product'
 import type { Settlement } from './settlement'
 import type { PlanDraft, ProductDraft } from './types'
 
@@ -27,11 +27,10 @@ const range = (values: number[], format: (n: number) => string) => {
 export function buildPost(input: PostInput): Post {
   const { product, plan, settlement, estimated, comparison, referenceName } = input
   const name = displayName(product)
-  const unit = product.unitName.trim()
   const host = settlement.shares[0]!
   const guests = settlement.shares.slice(1)
   const tag = estimated ? ' (예상)' : ''
-  const units = (n: number) => `${n}${unit}`
+  const units = (n: number) => formatUnits(product, n)
 
   const lines = [
     `📦 상품: ${product.fullTitle.trim()}${product.selectedOption.trim() ? ` / ${product.selectedOption.trim()}` : ''}`,

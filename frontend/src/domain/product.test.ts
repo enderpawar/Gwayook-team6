@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { blankProduct, draftProblems, paymentTotal, totalUnits } from './product'
+import { blankProduct, draftProblems, formatUnits, paymentTotal, totalUnits } from './product'
 
 const base = { ...blankProduct('manual'), displayedPrice: 10000, packCount: 2, unitsPerPack: 12, fullTitle: '생수', unitName: '병' }
 
@@ -37,5 +37,30 @@ describe('totalUnits / draftProblems', () => {
   })
   it('문제가 없으면 빈 객체', () => {
     expect(draftProblems({ ...base, shippingMode: 'none', discountMode: 'none' })).toEqual({})
+  })
+})
+
+describe('직접 소분 (F-20)', () => {
+  const softener = {
+    ...base, unitName: '통', packCount: 1, unitsPerPack: 1, netAmountPerUnit: 4000, measure: 'ml' as const,
+    splitMode: 'direct' as const, directStep: 100, shippingMode: 'none' as const, discountMode: 'none' as const,
+  }
+  const all = { label: true, measuring: true, container: true }
+  it('세 가지를 모두 확인해야 덜어 나눈다', () => {
+    expect(totalUnits({ ...softener, directChecks: all })).toBe(40)
+    for (const k of ['label', 'measuring', 'container'] as const) {
+      const p = { ...softener, directChecks: { ...all, [k]: false } }
+      expect(totalUnits(p)).toBe(1)
+      expect(draftProblems(p).directStep).toBeTruthy()
+    }
+  })
+  it('나누어떨어지지 않으면 막는다', () => {
+    const p = { ...softener, directChecks: all, directStep: 300 }
+    expect(totalUnits(p)).toBeNull()
+    expect(draftProblems(p).directStep).toContain('나누어떨어지는')
+  })
+  it('수량은 ml 로 보여준다', () => {
+    expect(formatUnits({ ...softener, directChecks: all }, 10)).toBe('1,000ml')
+    expect(formatUnits({ ...softener, splitMode: 'sealed' }, 2)).toBe('2통')
   })
 })

@@ -15,8 +15,16 @@ export type FieldName =
   | 'shippingFee'
   | 'discountAmount'
   | 'selectedOption'
+  | 'directStep'
 
 export type Source = 'preset' | 'capture' | 'manual'
+
+/** 직접 소분을 허용하기 전에 사용자가 확인하는 항목 (F-20) */
+export interface DirectChecks {
+  label: boolean
+  measuring: boolean
+  container: boolean
+}
 
 export interface PriceCandidate {
   amount: number
@@ -36,6 +44,11 @@ export interface ProductDraft {
   unitName: string
   netAmountPerUnit: number | null
   measure: Measure
+  /** sealed: 포장 단위로 나눔(기본), direct: 한 용기를 덜어 나눔 */
+  splitMode: 'sealed' | 'direct'
+  /** direct 일 때 한 번에 덜어 나누는 양(ml 또는 g) */
+  directStep: number | null
+  directChecks: DirectChecks
   displayedPrice: number | null
   shippingMode: ShippingMode
   shippingFee: number | null
@@ -43,6 +56,7 @@ export interface ProductDraft {
   discountAmount: number | null
   priceConfirmed: boolean
   priceCandidates: PriceCandidate[]
+  optionCandidates: string[]
   unresolvedFields: FieldName[]
 }
 
@@ -53,7 +67,7 @@ export interface ReferenceDraft {
   netAmountPerUnit: number | null
   measure: Measure
   sameSpecConfirmed: boolean
-  sourceKind: 'preset' | 'link' | 'manual'
+  sourceKind: 'preset' | 'serverPreset' | 'capture' | 'link' | 'manual'
   sourceUrl: string
   checkedOn: string
   purchasesPerYear: number | null

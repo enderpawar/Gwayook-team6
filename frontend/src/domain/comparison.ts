@@ -1,4 +1,4 @@
-import { isPositiveInt, paymentTotal, totalUnits } from './product'
+import { isDirectSplit, isPositiveInt, paymentTotal, totalUnits } from './product'
 import type { Measure, ProductDraft, ReferenceDraft } from './types'
 
 export type HoldReason =
@@ -70,7 +70,10 @@ export function compare(product: ProductDraft, reference: ReferenceDraft): Compa
   }
   if (product.measure !== reference.measure) return hold('incompatible')
 
-  const bulkPer = perUnitAmount(product.measure, product.netAmountPerUnit)
+  const bulkPer = perUnitAmount(
+    product.measure,
+    isDirectSplit(product) ? product.directStep : product.netAmountPerUnit,
+  )
   const refPer = perUnitAmount(reference.measure, reference.netAmountPerUnit)
   if (bulkPer === null || refPer === null) return hold('missingSpec')
   if (product.measure === 'count' && !reference.sameSpecConfirmed) return hold('specUnconfirmed')

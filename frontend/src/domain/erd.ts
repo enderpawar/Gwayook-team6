@@ -1,4 +1,4 @@
-import { displayName } from './product'
+import { displayName, isDirectSplit } from './product'
 import type { Post } from './post'
 import type { Settlement } from './settlement'
 import type { PlanDraft, ProductDraft, ReferenceDraft } from './types'
@@ -16,14 +16,16 @@ export function toErdRows(input: {
   post: Post
 }) {
   const { product, reference, plan, settlement, post } = input
+  const direct = isDirectSplit(product)
+  const step = direct ? (product.directStep ?? 1) : 1
   return {
     productAnalysis: {
       source: product.source === 'preset' ? ('PRESET' as const) : ('UPLOAD' as const),
       engine: product.source === 'capture' ? ('GEMINI' as const) : ('FALLBACK' as const),
       short_name: displayName(product),
       full_title: product.fullTitle.trim(),
-      unit_name: product.unitName.trim(),
-      bulk_total_qty: settlement.totalUnits,
+      unit_name: direct ? product.measure : product.unitName.trim(),
+      bulk_total_qty: settlement.totalUnits * step,
       bulk_total_price: settlement.total,
       small_pack_qty: reference.unitCount,
       small_pack_price: reference.price,
@@ -38,7 +40,7 @@ export function toErdRows(input: {
     },
     settlementShares: settlement.shares.map((s) => ({
       seat_no: s.seat,
-      qty: s.units,
+      qty: s.units * step,
       amount: s.amount,
     })),
   }

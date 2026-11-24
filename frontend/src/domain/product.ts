@@ -14,6 +14,9 @@ export function blankProduct(source: Source): ProductDraft {
     unitName: '',
     netAmountPerUnit: null,
     measure: 'count',
+    splitMode: 'sealed',
+    directStep: null,
+    directChecks: { label: false, measuring: false, container: false },
     displayedPrice: null,
     shippingMode: 'unknown',
     shippingFee: null,
@@ -21,6 +24,7 @@ export function blankProduct(source: Source): ProductDraft {
     discountAmount: null,
     priceConfirmed: false,
     priceCandidates: [],
+    optionCandidates: [],
     unresolvedFields: [],
   }
 }
@@ -43,10 +47,39 @@ export function blankReference(): ReferenceDraft {
 export const isPositiveInt = (n: number | null): n is number =>
   n !== null && Number.isSafeInteger(n) && n > 0
 
-export function totalUnits(p: Pick<ProductDraft, 'packCount' | 'unitsPerPack'>): number | null {
+/** 직접 소분 조건을 모두 확인했을 때만 true. 하나라도 빠지면 포장 단위로 나눈다. */
+export function isDirectSplit(p: ProductDraft): boolean {
+  return (
+    p.splitMode === 'direct' &&
+    (p.measure === 'ml' || p.measure === 'g') &&
+    p.directChecks.label &&
+    p.directChecks.measuring &&
+    p.directChecks.container
+  )
+}
+
+/** 나누는 최소 단위의 총 개수. 직접 소분이면 덜어 나누는 횟수다. */
+export function totalUnits(p: ProductDraft): number | null {
   if (!isPositiveInt(p.packCount) || !isPositiveInt(p.unitsPerPack)) return null
-  const units = p.packCount * p.unitsPerPack
-  return units <= MAX_UNITS ? units : null
+  const packs = p.packCount * p.unitsPerPack
+  if (!isDirectSplit(p)) return packs <= MAX_UNITS ? packs : null
+  if (!isPositiveInt(p.netAmountPerUnit) || !isPositiveInt(p.directStep)) return null
+  const steps = (packs * p.netAmountPerUnit) / p.directStep
+  return Number.isInteger(steps) && steps <= MAX_UNITS ? steps : null
+}
+
+/** 움직이는 숫자에 쓰는 값과 단위 */
+export function unitParts(p: ProductDraft, units: number): { value: number; suffix: string } {
+  return isDirectSplit(p) && p.directStep
+    ? { value: units * p.directStep, suffix: p.measure }
+    : { value: units, suffix: p.unitName.trim() }
+}
+
+/** 수량을 화면에 쓰는 문구. 직접 소분이면 ml·g 로 바꿔 보여준다. */
+export function formatUnits(p: ProductDraft, units: number): string {
+  return isDirectSplit(p) && p.directStep
+    ? `${(units * p.directStep).toLocaleString('ko-KR')}${p.measure}`
+    : `${units.toLocaleString('ko-KR')}${p.unitName.trim()}`
 }
 
 export interface PaymentTotal {
@@ -77,7 +110,18 @@ export function draftProblems(p: ProductDraft): Partial<Record<FieldName, string
   if (!p.unitName.trim()) out.unitName = '나누는 단위를 입력하세요. 예: 롤, 병, 개'
   if (!isPositiveInt(p.packCount)) out.packCount = '1 이상의 정수를 입력하세요.'
   if (!isPositiveInt(p.unitsPerPack)) out.unitsPerPack = '1 이상의 정수를 입력하세요.'
-  if (!out.packCount && !out.unitsPerPack && totalUnits(p) === null) {
+  if (isDirectSplit(p)) {
+    if (!isPositiveInt(p.netAmountPerUnit)) {
+      out.netAmountPerUnit = '한 용기의 양을 정수로 입력하세요.'
+    } else if (!isPositiveInt(p.directStep)) {
+      out.directStep = '한 번에 덜어 나눌 양을 입력하세요.'
+    } else if (!out.packCount && !out.unitsPerPack && totalUnits(p) === null) {
+      out.directStep = '전체 양이 딱 나누어떨어지는 값으로 입력하세요.'
+    }
+  } else if (p.splitMode === 'direct') {
+    out.directStep = '아래 세 가지를 모두 확인해야 덜어 나눌 수 있어요. 아니면 포장 단위로 나누세요.'
+  }
+  if (!out.packCount && !out.unitsPerPack && !isDirectSplit(p) && totalUnits(p) === null) {
     out.unitsPerPack = `전체 수량은 ${MAX_UNITS.toLocaleString('ko-KR')}개 이하로 입력하세요.`
   }
   if (!isPositiveInt(p.displayedPrice)) {
